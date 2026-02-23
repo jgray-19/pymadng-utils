@@ -1,7 +1,7 @@
 """
-Tests for MadCoreInterface.
+Tests for CoreMadInterface.
 
-This module contains pytest tests for the MadCoreInterface class.
+This module contains pytest tests for the CoreMadInterface class.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from pymadng_utils.mad import MadAcDipoleInterface
-from pymadng_utils.mad.core_mad_interface import MadCoreInterface
+from pymadng_utils.mad.core_mad_interface import CoreMadInterface
 from tests.mad.helpers import (
     check_beam_setup,
     check_element_observations,
@@ -45,15 +45,15 @@ def loaded_ac_interface_with_beam(seq_b1: Path):
     ids=["default_py_name", "custom_py_name"],
 )
 def test_init(py_name, expected_py_name, var_name, var_value) -> None:
-    """Test initialization of MadCoreInterface."""
-    interface = MadCoreInterface() if py_name is None else MadCoreInterface(py_name=py_name)
+    """Test initialization of CoreMadInterface."""
+    interface = CoreMadInterface() if py_name is None else CoreMadInterface(py_name=py_name)
     check_interface_basic_init(interface, expected_py_name)
     interface.mad.send(f"{var_name} = {var_value}")
     assert getattr(interface.mad, var_name) == var_value
     cleanup_interface(interface)
 
 
-def test_load_sequence(interface: MadCoreInterface, seq_b1: Path) -> None:
+def test_load_sequence(interface: CoreMadInterface, seq_b1: Path) -> None:
     """Test loading a sequence file."""
     # this test explicitly checks load_sequence behaviour
     interface.load_sequence(seq_b1, "lhcb1")
@@ -65,7 +65,7 @@ def test_load_sequence(interface: MadCoreInterface, seq_b1: Path) -> None:
 
 
 @pytest.mark.parametrize("energy", [6500.0, 7000.0])
-def test_setup_beam(loaded_interface: MadCoreInterface, energy) -> None:
+def test_setup_beam(loaded_interface: CoreMadInterface, energy) -> None:
     """Test setting up beam parameters."""
     interface = loaded_interface
     interface.setup_beam(particle="proton", beam_energy=energy)
@@ -78,7 +78,7 @@ def test_setup_beam(loaded_interface: MadCoreInterface, energy) -> None:
     ids=["SingleElement", "BPMElements"],
 )
 def test_observe_elements(
-    loaded_interface: MadCoreInterface,
+    loaded_interface: CoreMadInterface,
     pattern: str,
 ) -> None:
     """Test configuring element observation."""
@@ -87,7 +87,7 @@ def test_observe_elements(
     loaded_interface.unobserve_elements([pattern])
 
 
-def test_cycle_sequence(loaded_interface: MadCoreInterface) -> None:
+def test_cycle_sequence(loaded_interface: CoreMadInterface) -> None:
     """Test cycling sequence to a marker."""
     loaded_interface.mad.send("""py:send(loaded_sequence:raw_get("__cycle"))""")
     assert loaded_interface.mad.recv() is None
@@ -126,7 +126,7 @@ def test_cycle_sequence(loaded_interface: MadCoreInterface) -> None:
     ids=["default_marker", "custom_marker"],
 )
 def test_install_marker(
-    loaded_interface: MadCoreInterface,
+    loaded_interface: CoreMadInterface,
     element,
     marker_name,
     offset,
@@ -150,7 +150,7 @@ def test_install_marker(
     assert ret_name == expected_marker_name
 
 
-def test_getset_variables(interface: MadCoreInterface) -> None:
+def test_getset_variables(interface: CoreMadInterface) -> None:
     """Test setting MAD variables."""
     interface.set_variables(**{"KQTL_1L1_B1": 1.2, "KQTL_1L2_B1": 2.3})
     assert interface.mad.KQTL_1L1_B1 == 1.2
@@ -161,13 +161,13 @@ def test_getset_variables(interface: MadCoreInterface) -> None:
     assert v2 == 2.3
 
 
-def test_set_madx_variables(interface: MadCoreInterface) -> None:
+def test_set_madx_variables(interface: CoreMadInterface) -> None:
     """Test setting MAD-X variables."""
     interface.set_madx_variables(**{"kqtl_1l1_b1": 1.5, "KQTL_1L2_B1": 2.5})
     assert interface.mad.MADX.KQTL_1L1_B1 == 1.5
     assert interface.mad.MADX.kqtl_1l2_b1 == 2.5
 
-def test_twiss(loaded_interface_with_beam: MadCoreInterface):
+def test_twiss(loaded_interface_with_beam: CoreMadInterface):
     """Test twiss function."""
     interface = loaded_interface_with_beam
     twiss_df = interface.run_twiss()
@@ -239,7 +239,7 @@ def test_twiss(loaded_interface_with_beam: MadCoreInterface):
     ],
 )
 def test_match_tunes(
-    loaded_interface_with_beam: MadCoreInterface,
+    loaded_interface_with_beam: CoreMadInterface,
     target_qx: float,
     target_qy: float,
     qx_knob: str,

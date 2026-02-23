@@ -10,10 +10,7 @@ import contextlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    import tfs
-
-if TYPE_CHECKING:
-    from pymadng_utils.mad.core_mad_interface import MadCoreInterface
+    from pymadng_utils.mad.core_mad_interface import CoreMadInterface
 
 
 def _recv_n(mad: Any, n: int) -> list[Any]:
@@ -36,14 +33,14 @@ def cleanup_interface(interface: Any) -> None:
         del interface
 
 
-def check_sequence_loaded(interface: MadCoreInterface, seq_name: str = "lhcb1") -> None:
+def check_sequence_loaded(interface: CoreMadInterface, seq_name: str = "lhcb1") -> None:
     """Check that sequence is loaded correctly."""
     assert seq_name == interface.mad.SEQ_NAME
     assert interface.mad.loaded_sequence is not None
 
 
 def check_beam_setup(
-    interface: MadCoreInterface,
+    interface: CoreMadInterface,
     particle: str = "proton",
     energy: float | None = None,
     charge: int = 1,
@@ -58,7 +55,7 @@ def check_beam_setup(
 
 
 def check_element_observations(
-    interface: MadCoreInterface,
+    interface: CoreMadInterface,
     condition: str,
 ) -> None:
     """Helper to check element observations in MAD."""
@@ -81,7 +78,7 @@ py:send("PASS")""")
 
 
 def get_marker_and_element_positions(
-    interface: MadCoreInterface, marker_name: str, element_name: str
+    interface: CoreMadInterface, marker_name: str, element_name: str
 ) -> tuple[int | float, int, int | float, int]:
     """Helper to get positions and indices of marker and element."""
     interface.mad.send(f"""

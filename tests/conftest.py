@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import pytest
 import tfs
 
-from pymadng_utils.mad.core_mad_interface import MadCoreInterface
+from pymadng_utils.mad.core_mad_interface import CoreMadInterface
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -96,29 +96,29 @@ def corrector_table(corrector_file: Path) -> tfs.TfsDataFrame:
 
 
 @pytest.fixture(scope="function")
-def interface() -> Generator[MadCoreInterface, None, None]:
-    """Create a fresh MadCoreInterface for each test."""
-    iface = MadCoreInterface()
+def interface() -> Generator[CoreMadInterface, None, None]:
+    """Create a fresh CoreMadInterface for each test."""
+    iface = CoreMadInterface()
     yield iface
     with contextlib.suppress(Exception):
         del iface
 
 
 @pytest.fixture(scope="function")
-def loaded_interface(interface: MadCoreInterface, seq_b1: Path) -> MadCoreInterface:
+def loaded_interface(interface: CoreMadInterface, seq_b1: Path) -> CoreMadInterface:
     """Fixture that returns an interface with the example sequence loaded."""
     interface.load_sequence(seq_b1, "lhcb1")
     return interface
 
 
 @pytest.fixture(scope="function")
-def loaded_interface_with_beam(loaded_interface: MadCoreInterface) -> MadCoreInterface:
+def loaded_interface_with_beam(loaded_interface: CoreMadInterface) -> CoreMadInterface:
     """Fixture that returns an interface with the example sequence loaded and beam set up."""
     loaded_interface.setup_beam(particle="proton", beam_energy=6800.0)
     return loaded_interface
 
 @pytest.fixture(scope="function")
-def beam2_interface(interface: MadCoreInterface, seq_b2: Path) -> MadCoreInterface:
+def beam2_interface(interface: CoreMadInterface, seq_b2: Path) -> CoreMadInterface:
     """Fixture that returns an interface with the example sequence loaded and beam set up."""
     interface.load_sequence(seq_b2, "lhcb2")
     interface.setup_beam(particle="proton", beam_energy=6800.0)
