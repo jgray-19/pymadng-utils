@@ -11,9 +11,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-
 from pymadng_utils.mad import AcDipoleMadInterface
 from pymadng_utils.mad.core_mad_interface import CoreMadInterface
+
 from tests.mad.helpers import (
     check_beam_setup,
     check_element_observations,
