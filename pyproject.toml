@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pymadng-utils"
+version = "0.1.0"
+description = "MAD-NG and pymadng utility interfaces and tests"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "pandas",
+    "tfs-pandas",
+    "pymadng>=0.3.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+madx = [
+    "cpymad",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pymadng_utils*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["tests/data"]
+addopts = [
+    "--log-cli-level=INFO",
+    "--log-level=INFO",
+    "--log-cli-format=%(levelname)s %(name)s %(message)s",
+    "-s",
+]

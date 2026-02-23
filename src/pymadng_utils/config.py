@@ -1,0 +1,26 @@
+"""
+Configuration constants for the knob optimisation pipeline.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+# =============================================================================
+# OPTIMISATION SETTINGS
+# =============================================================================
+
+logger = logging.getLogger(__name__)
+
+# Physical constants
+PROTON_MASS = 938.27208816 * 1e-3  # [GeV] Proton energy-mass
+
+# =============================================================================
+# FILE PATHS
+# =============================================================================
+
+PROJECT_ROOT = Path(__file__).absolute().parent
+logger.info(f"Current project root: {PROJECT_ROOT}")
+
+SHUSHING_SCRIPT = PROJECT_ROOT / "mad_scripts" / "shush_mad_output.mad"
