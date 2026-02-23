@@ -13,7 +13,7 @@ def temp_model_dir(tmp_path):
 
 
 @pytest.mark.parametrize("beam", [1, 2])
-def test_create_lhc_models(beam, temp_model_dir):
+def test_create_lhc_models(beam, temp_model_dir, acc_models_path):
     """Test creating LHC model for the specified beam, mimicking main()."""
     # Create model for the specified beam
     nat_tunes = [0.28, 0.31]
@@ -25,7 +25,16 @@ def test_create_lhc_models(beam, temp_model_dir):
         temp_model_dir / f"model_b{beam}__t{nat_tunes[0]}_{nat_tunes[1]}_{optics_label}"
     )
     drv_tunes = [0.27, 0.322]
-    create_lhc_model(beam=beam, output_dir=model_dir, year=year, modifiers=modifiers)
+    create_lhc_model(
+        beam=beam,
+        output_dir=model_dir,
+        year=year,
+        modifiers=modifiers,
+        fetch="path",
+        path=acc_models_path,
+        nat_tunes=nat_tunes,
+        drv_tunes=drv_tunes,
+    )
 
     # Check that directory is created
     assert model_dir.exists()

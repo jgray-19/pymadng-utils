@@ -6,6 +6,7 @@ This module contains pytest tests for the CoreMadInterface class.
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -33,7 +34,9 @@ def loaded_ac_interface_with_beam(seq_b1: Path):
     interface.load_sequence(seq_b1, "lhcb1")
     interface.setup_beam(particle="proton", beam_energy=6800.0)
     yield interface
-    interface.close()
+    # Suppress only expected cleanup-related errors to avoid hiding real bugs.
+    with contextlib.suppress(AttributeError, RuntimeError):
+        interface.close()
 
 
 @pytest.mark.parametrize(

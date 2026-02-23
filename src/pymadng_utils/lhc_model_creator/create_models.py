@@ -25,6 +25,8 @@ def create_lhc_model(
     output_dir: pathlib.Path,
     year: str,
     *,
+    fetch: str = "afs",
+    path: str | None = None,
     nat_tunes: list[float] = [0.28, 0.31],
     drv_tunes: list[float] = [0.27, 0.322],
     energy: float = 6800.0,
@@ -63,6 +65,9 @@ def create_lhc_model(
     if beam not in (1, 2):
         raise ValueError(f"Beam must be 1 or 2, got {beam}")
 
+    if fetch != "afs" and path is None:
+        raise ValueError("Custom path must be provided if fetch method is not 'afs'")
+
     if isinstance(modifiers, str):
         modifiers = [modifiers]
 
@@ -83,9 +88,11 @@ def create_lhc_model(
     # Step 1: Create base model with omc3
     LOGGER.info("Step 1: Creating base model with omc3...")
     create_drv_tunes = [0.0, 0.0] if drv_tunes is None else drv_tunes
+    LOGGER.debug("Model fetch path: %s", path)
     create_instance_and_model(
         accel="lhc",
-        fetch="afs",
+        fetch=fetch,
+        path=path,
         type="nominal",
         beam=beam,
         year=year,

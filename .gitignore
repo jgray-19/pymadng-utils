@@ -161,16 +161,3 @@ cython_debug/
 
 # remove the tensorboard logs
 runs/
-
-**/acc-models-lhc/
-*_analysis*/
-*_results/
-analysis*/
-b1_flat_60_18cm/
-betabeat/
-docs/api/
-models/**
-plots/
-*.out
-*.png
-.vscode/
