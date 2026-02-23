@@ -17,7 +17,7 @@ def update_model_with_madng(
     beam: int,
     model_dir: Path,
     *,
-    tunes: list[float] | None = None,
+    tunes: list[float] = [0.28, 0.31],
     drv_tunes: list[float] | None = None,
     matching_knob: str = "_op",
 ) -> None:
@@ -43,9 +43,6 @@ def update_model_with_madng(
     matching_knob : str, optional
         Suffix for the tune matching knobs. Default is "_op".
     """
-    if tunes is None:
-        tunes = [0.28, 0.31]
-
     LOGGER.info(f"\n{'=' * 60}")
     LOGGER.info(f"Updating model for beam {beam} with MAD-NG")
     LOGGER.info(f"Natural tunes: {tunes}, Driven tunes: {drv_tunes}")
