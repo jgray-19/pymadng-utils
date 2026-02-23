@@ -19,10 +19,12 @@ dependencies = [
 test = [
     "pytest",
     "pytest-cov",
+    "cpymad",
     "omc3",
 ]
-madx = [
+model = [
     "cpymad",
+    "omc3",
 ]
 
 [tool.setuptools]
