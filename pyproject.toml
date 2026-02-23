@@ -19,6 +19,7 @@ dependencies = [
 test = [
     "pytest",
     "pytest-cov",
+    "omc3",
 ]
 madx = [
     "cpymad",

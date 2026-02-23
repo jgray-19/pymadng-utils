@@ -58,15 +58,16 @@ def make_madx_sequence(
                 line = customisation_command(line)
 
             # Check if twiss[_a-z]*\.dat is in the line, then we stop processing and save the sequence
-            if re.search(r"twiss[_a-z]*\.dat", line):
+            if re.search(r"'twiss[_a-z]*\.dat'", line):
                 # Stop processing and save the sequence
                 save_cmd = f"""
 set, format="-16.16e";
 save, sequence={sequence_madx_name}, file="{sequence_save_path.absolute()}", noexpr=false;
                 """
                 madx.input(save_cmd)
+                print(save_cmd)
                 break
 
-            madx.send(line)
+            madx.input(line)
     LOGGER.info(f"Saved MAD-X sequence to {sequence_save_path}")
     return sequence_save_path

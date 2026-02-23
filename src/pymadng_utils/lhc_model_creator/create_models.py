@@ -26,7 +26,7 @@ def create_lhc_model(
     year: str,
     *,
     nat_tunes: list[float] = [0.28, 0.31],
-    drv_tunes: list[float] | None = [0.27, 0.322],
+    drv_tunes: list[float] = [0.27, 0.322],
     energy: float = 6800.0,
     modifiers: str | list[str] | None = None,
 ) -> None:

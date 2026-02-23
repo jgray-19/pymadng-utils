@@ -1,6 +1,6 @@
 """MAD-NG interface utilities."""
 
-from .core_mad_interface import CoreMadInterface, MadAcDipoleInterface
+from .core_mad_interface import AcDipoleMadInterface, CoreMadInterface
 from .model_creator_mad_interface import (
     LhcModelCreatorMadInterface,
     ModelCreatorMadInterface,
@@ -8,7 +8,7 @@ from .model_creator_mad_interface import (
 
 __all__ = [
     "CoreMadInterface",
-    "MadAcDipoleInterface",
+    "AcDipoleMadInterface",
     "ModelCreatorMadInterface",
     "LhcModelCreatorMadInterface",
 ]

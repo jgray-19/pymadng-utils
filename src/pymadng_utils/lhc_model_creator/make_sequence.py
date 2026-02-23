@@ -76,7 +76,7 @@ def make_lhc_sequence(
     seq_path = seq_outdir / f"lhcb{beam}_saved.seq" if seq_outdir else model_dir / f"lhcb{beam}_saved.seq"
     return make_madx_sequence(
         model_dir=model_dir,
-        sequence_madx_name=f"lhcb{beam}_saved.seq",
+        sequence_madx_name=f"lhcb{beam}",
         sequence_save_path=seq_path,
         madx_filename=madx_filename,
         customisation_command=customisation_command,

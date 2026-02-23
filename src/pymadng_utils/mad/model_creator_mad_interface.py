@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
-from pymadng_utils.mad import MadAcDipoleInterface
+from pymadng_utils.mad import AcDipoleMadInterface
 
 # Model data columns and headers
 MODEL_STRENGTHS = [
@@ -72,7 +72,7 @@ MODEL_COLUMNS = [
 LOGGER = logging.getLogger(__name__)
 
 
-class ModelCreatorMadInterface(MadAcDipoleInterface):
+class ModelCreatorMadInterface(AcDipoleMadInterface):
     """MAD-NG interface specialised for model creation workflows."""
 
     TUNE_MATCH_TOLERANCE = 1e-6

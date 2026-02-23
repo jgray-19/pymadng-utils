@@ -2,7 +2,7 @@
 
 The module defines:
 - ``CoreMadInterface``: minimal operational API used across projects.
-- ``MadAcDipoleInterface``: optional extension that adds AC dipole installation.
+- ``AcDipoleMadInterface``: optional extension that adds AC dipole installation.
 
 Backward-compatible aliases are kept for existing imports.
 """
@@ -275,7 +275,7 @@ MAD.element.marker {quoted_marker} {{ at={offset}, from="{element_name}" }}
         self.mad.close()
 
 
-class MadAcDipoleInterface(CoreMadInterface):
+class AcDipoleMadInterface(CoreMadInterface):
     """Optional extension of ``CoreMadInterface`` with AC dipole installation."""
 
     def install_ac_dipole(

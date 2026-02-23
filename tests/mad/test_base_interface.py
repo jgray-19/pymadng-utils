@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from pymadng_utils.mad import MadAcDipoleInterface
+from pymadng_utils.mad import AcDipoleMadInterface
 from pymadng_utils.mad.core_mad_interface import CoreMadInterface
 from tests.mad.helpers import (
     check_beam_setup,
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 @pytest.fixture(scope="function")
 def loaded_ac_interface_with_beam(seq_b1: Path):
     """Fixture that returns an AC-capable interface with sequence loaded and beam set up."""
-    interface = MadAcDipoleInterface()
+    interface = AcDipoleMadInterface()
     interface.load_sequence(seq_b1, "lhcb1")
     interface.setup_beam(particle="proton", beam_energy=6800.0)
     yield interface
