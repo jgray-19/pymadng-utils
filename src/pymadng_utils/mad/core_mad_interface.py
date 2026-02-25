@@ -272,7 +272,9 @@ MAD.element.marker {quoted_marker} {{ at={offset}, from="{element_name}" }}
 
     def close(self) -> None:
         """Close the MAD-NG interface."""
-        self.mad.close()
+        if self.mad is not None:
+            logger.debug("Closing MAD interface")
+            self.mad.close()
 
 
 class AcDipoleMadInterface(CoreMadInterface):
