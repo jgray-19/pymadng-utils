@@ -98,18 +98,25 @@ class KnobMadInterface(CoreMadInterface):
         self.mad.send(f"{self.py_name}:send(true)")
         assert self.mad.recv(), "Failed to set corrector strengths"
 
-    def set_tune_knobs(self, tune_knobs_file: str | Path) -> None:
-        """Load and set predefined tune knobs from file."""
-        path = Path(tune_knobs_file)
-        tune_knobs = read_knobs(path)
-        # Get existing tune knob names in MAD
-        prev = self.mad.recv_vars(*[f"MADX['{name}']" for name in tune_knobs])
+    def set_tune_knobs(self, knobs_file: str | Path) -> None:
+        """Load and set predefined tune knobs from file - deprecated in favor set_knobs."""
+        logger.warning(
+            "set_tune_knobs is deprecated, use set_knobs instead for more general knob setting"
+        )
+        self.set_knobs(knobs_file)
 
-        for name, val in tune_knobs.items():
+    def set_knobs(self, knobs_file: str | Path) -> None:
+        """Load and set predefined knobs from file."""
+        path = Path(knobs_file)
+        knobs = read_knobs(path)
+        # Get existing knob names in MAD
+        prev = self.mad.recv_vars(*[f"MADX['{name}']" for name in knobs])
+
+        for name, val in knobs.items():
             self.mad.send(f"MADX['{name}'] = {val}")
 
         self.mad.send(f"{self.py_name}:send(true)")
-        assert self.mad.recv(), "Failed to set tune knobs"
+        assert self.mad.recv(), "Failed to set knobs"
 
-        logger.debug(f"Previous tune knob values: {prev}")
-        logger.debug(f"Set tune knobs from {path}: {len(tune_knobs)}")
+        logger.debug(f"Previous knob values: {prev}")
+        logger.debug(f"Set knobs from {path}: {len(knobs)}")

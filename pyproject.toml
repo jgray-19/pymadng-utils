@@ -26,6 +26,10 @@ model = [
     "cpymad",
     "omc3",
 ]
+docs = [
+    "sphinx>=8,<9",
+    "sphinx-rtd-theme>=3,<4",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -43,3 +47,9 @@ addopts = [
     "--log-cli-format=%(levelname)s %(name)s %(message)s",
     "-s",
 ]
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+omit = ["tests/*"]
