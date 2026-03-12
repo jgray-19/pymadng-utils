@@ -7,11 +7,3 @@ I/O Utilities
    :members:
    :undoc-members:
    :show-inheritance:
-
-Implementation details
-----------------------
-
-.. automodule:: pymadng_utils.io.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
