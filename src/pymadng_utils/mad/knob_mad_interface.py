@@ -19,22 +19,6 @@ logger = logging.getLogger(__name__)
 class KnobMadInterface(CoreMadInterface):
     """Base class for accelerator-specific MAD-NG interfaces with common setup methods."""
 
-    def set_magnet_strengths(self, strengths: dict[str, float]) -> None:
-        """Set magnet strengths using standardised naming conventions."""
-        suffixes = {".k0", ".k1", ".k2", ".kick"}
-        logger.debug(f"Setting {len(strengths)} magnet strengths")
-
-        variables_to_set = {}
-        for name, strength in strengths.items():
-            if not any(suffix in name for suffix in suffixes):
-                raise ValueError(
-                    f"Magnet name '{name}' must end with one of {suffixes}"
-                )
-            magnet_name, var = name.rsplit(".", 1)
-            variables_to_set[f"MADX['{magnet_name}'].{var}"] = strength
-
-        self.set_variables(**variables_to_set)
-
     def apply_corrector_strengths(self, corrector_table: pd.DataFrame) -> None:
         """Apply corrector strengths from a table to MAD sequence."""
         logger.debug(f"Applying corrector strengths to {len(corrector_table)} elements")
@@ -71,10 +55,10 @@ class KnobMadInterface(CoreMadInterface):
     def observe_bpms(self, bpm_pattern: str, bad_bpms: list[str] | None = None) -> None:
         """Set up the MAD-NG session to observe BPMs."""
         self.observe_elements(bpm_pattern)
-        logger.info(f"Set up observation for BPMs matching pattern: {bpm_pattern}")
+        logger.debug(f"Set up observation for BPMs matching pattern: {bpm_pattern}")
         if bad_bpms:
             self.unobserve_elements(bad_bpms)
-            logger.info(f"Set up observation for bad BPMs: {bad_bpms}")
+            logger.debug(f"Set up observation for bad BPMs: {bad_bpms}")
 
     def set_corrector_strengths(self, corrector_strengths: str | Path) -> None:
         """Load corrector strengths from file and apply them to the sequence."""

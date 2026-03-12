@@ -60,7 +60,9 @@ class CoreMadInterface:
         self.mad.send(f'MADX:load("{file_path}", "{mad_cache_path}")')
 
         if self.mad.MADX[seq_name] == 0:
-            raise ValueError(f"Sequence '{seq_name}' not found in MAD file '{sequence_file}'")
+            raise ValueError(
+                f"Sequence '{seq_name}' not found in MAD file '{sequence_file}'"
+            )
         self.mad.send(f"loaded_sequence = MADX.{seq_name}")
         self.mad["SEQ_NAME"] = seq_name
         self.mad.send("unshush()")
@@ -73,7 +75,9 @@ class CoreMadInterface:
             beam_energy: Beam energy in GeV
             particle: Particle type (default: proton)
         """
-        logger.debug(f"Setting beam: particle={particle}, energy={beam_energy:.15e} GeV")
+        logger.debug(
+            f"Setting beam: particle={particle}, energy={beam_energy:.15e} GeV"
+        )
         self.mad.send(
             f'loaded_sequence.beam = beam {{ particle = "{particle}", energy = {beam_energy:.15e} }}'
         )
@@ -100,11 +104,13 @@ loaded_sequence:select(observed, {{pattern="{pattern}"}})
             elements: List of element names to unobserve
         """
         logger.debug(f"Unobserving elements: {', '.join(elements)}")
-        for elem in elements:
-            self.mad.send(f"""
-local observed in MAD.element.flags
-loaded_sequence:deselect(observed, {{pattern="{elem}"}})
-""")
+        self.mad.send(
+            "local observed in MAD.element.flags\n"
+            + "\n".join(
+                f'loaded_sequence:deselect(observed, {{pattern="{elem}"}})'
+                for elem in elements
+            )
+        )
 
     def cycle_sequence(self, marker_name: str | None = None) -> None:
         """
@@ -126,6 +132,49 @@ loaded_sequence:deselect(observed, {{pattern="{elem}"}})
         except RuntimeError as e:
             logger.error(f"Error during sequence cycling: {e}")
             raise RuntimeError("Cycle failed - check MAD output for details") from e
+
+    def replace_with_marker(
+        self, element_name: str, marker_name: str | None = None
+    ) -> str:
+        """
+        Replace an element with a marker.
+
+        Args:
+            element_name: Name of the element to replace
+            marker_name: Name of the new marker
+
+        Returns:
+            str: The name of the marker that replaces the original element.
+        """
+        if marker_name is None:
+            marker_name = element_name
+
+        self.mad.send(f"""
+correct_elm = MADX['{element_name}']
+{self.py_name}:send(correct_elm)
+{self.py_name}:send({{correct_elm.refpos or (loaded_sequence.refer or "centre"), correct_elm.l}}, true)
+        """)
+        elm = self.mad.recv("correct_elm")
+        details = self.mad.recv()
+        if elm == 0:
+            raise ValueError(f"Could not find element: {element_name}")
+        if details[0] != "centre" and details[1] > 0:
+            raise ValueError(
+                "Replacing markers currently not supported with non-centre reference or non-zero length"
+            )
+        self.mad.send(f"""
+local new_elm = MAD.element.marker '{marker_name}' {{ at=correct_elm.at, from=correct_elm.from }}
+local replaced = loaded_sequence:replace({{new_elm}}, '{element_name}')
+MADX['{element_name}'] = new_elm ! Replace in the madx environment for later reference
+{self.py_name}:send(replaced and #replaced or 0)
+correct_elm = nil
+        """)
+        if (n_replaced := self.mad.recv()) != 1:
+            raise ValueError(
+                f"Element replacement failed, replaced {n_replaced} elements instead of 1"
+            )
+
+        return marker_name
 
     def install_marker(
         self, element_name: str, marker_name: str | None = None, offset: float = -1e-10
@@ -179,7 +228,9 @@ MAD.element.marker {quoted_marker} {{ at={offset}, from="{element_name}" }}
             twiss_kwargs["observe"] = 1  # Default to no observation if not set
 
         try:
-            self.mad["tws", "flw"] = self.mad.twiss(sequence="loaded_sequence", **twiss_kwargs)
+            self.mad["tws", "flw"] = self.mad.twiss(
+                sequence="loaded_sequence", **twiss_kwargs
+            )
         except ValueError as e:
             logger.error(f"Error during twiss calculation: {e}")
             raise RuntimeError("Twiss failed - check MAD output for details") from e
@@ -219,56 +270,6 @@ MAD.element.marker {quoted_marker} {{ at={offset}, from="{element_name}" }}
             Variable values
         """
         return self.mad.recv_vars(*names, shallow_copy=True)
-
-    def match_tunes(
-        self,
-        target_qx: float = 0.28,
-        target_qy: float = 0.31,
-        qx_knob: str = "dqx_b1_op",
-        qy_knob: str = "dqy_b1_op",
-    ) -> dict[str, float]:
-        """
-        Match fractional tunes using specified knobs.
-
-        Args:
-            target_qx: Target horizontal fractional tune
-            target_qy: Target vertical fractional tune
-            qx_knob: Horizontal tune knob name
-            qy_knob: Vertical tune knob name
-
-        Returns:
-            Dictionary of matched knob values
-        """
-        logger.info(f"Matching tunes to ({target_qx}, {target_qy})")
-
-        self.mad["result"] = self.mad.match(
-            command=r"\ -> twiss{sequence=loaded_sequence}",
-            variables=[
-                {"var": f"'MADX.{qx_knob}'", "name": f"'{qx_knob}'"},
-                {"var": f"'MADX.{qy_knob}'", "name": f"'{qy_knob}'"},
-            ],
-            equalities=[
-                {
-                    "expr": f"\\t -> math.abs(t.q1)-(62+{target_qx})",
-                    "name": "'q1'",
-                    "tol": 1e-6,
-                },
-                {
-                    "expr": f"\\t -> math.abs(t.q2)-(60+{target_qy})",
-                    "name": "'q2'",
-                    "tol": 1e-6,
-                },
-            ],
-            info=2,
-        )
-
-        matched_tunes = {
-            qx_knob: self.mad[f"MADX['{qx_knob}']"],
-            qy_knob: self.mad[f"MADX['{qy_knob}']"],
-        }
-
-        logger.info(f"Matched tune values: {matched_tunes}")
-        return matched_tunes
 
     def close(self) -> None:
         """Close the MAD-NG interface."""
@@ -315,7 +316,9 @@ local bety = tws['{marker_name}'].beta22
         betx, bety = self.mad.recv()
 
         if betx is None or bety is None:
-            raise ValueError(f"Could not retrieve beta functions at marker '{marker_name}'")
+            raise ValueError(
+                f"Could not retrieve beta functions at marker '{marker_name}'"
+            )
 
         # Install AC kickers
         self.mad.send(f"""
@@ -338,4 +341,6 @@ loaded_sequence:install{{
 }}
 """)
 
-        logger.debug(f"AC dipole installed: betx={betx:.6f}, bety={bety:.6f} at {marker_name}")
+        logger.debug(
+            f"AC dipole installed: betx={betx:.6f}, bety={bety:.6f} at {marker_name}"
+        )

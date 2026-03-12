@@ -6,7 +6,6 @@ This module contains pytest tests for the CoreMadInterface class.
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -65,6 +64,31 @@ def test_load_sequence(interface: CoreMadInterface, seq_b1: Path) -> None:
     assert interface.mad.MADX.lhcb1 is not None and interface.mad.MADX.lhcb1 != 0
 
 
+def test_load_sequence_unknown_sequence_raises(
+    interface: CoreMadInterface, seq_b1: Path
+) -> None:
+    """Loading a valid file with a missing sequence name should fail clearly."""
+    with pytest.raises(
+        ValueError,
+        match=r"Sequence 'does_not_exist' not found in MAD file",
+    ):
+        interface.load_sequence(seq_b1, "does_not_exist")
+
+
+def test_load_sequence_bad_file_raises(
+    interface: CoreMadInterface, tmp_path: Path
+) -> None:
+    """Loading an invalid sequence file should fail through the missing-sequence check."""
+    bad_sequence = tmp_path / "bad.seq"
+    bad_sequence.write_text("this is not a MAD-X sequence\n")
+
+    with pytest.raises(
+        ValueError,
+        match=r"Sequence 'lhcb1' not found in MAD file",
+    ):
+        interface.load_sequence(bad_sequence, "lhcb1")
+
+
 @pytest.mark.parametrize("energy", [6500.0, 7000.0])
 def test_setup_beam(loaded_interface: CoreMadInterface, energy) -> None:
     """Test setting up beam parameters."""
@@ -102,6 +126,16 @@ def test_cycle_sequence(loaded_interface: CoreMadInterface) -> None:
     loaded_interface.mad.send("""py:send(loaded_sequence:raw_get("__cycle"))""")
     cycle_marker = loaded_interface.mad.recv()
     assert cycle_marker is None
+
+
+def test_cycle_sequence_invalid_marker_raises(
+    loaded_interface: CoreMadInterface,
+) -> None:
+    """Cycling to a missing marker should raise the wrapped runtime error."""
+    with pytest.raises(
+        RuntimeError, match="Cycle failed - check MAD output for details"
+    ):
+        loaded_interface.cycle_sequence("NOT_A_MARKER")
 
 
 @pytest.mark.parametrize(
@@ -149,6 +183,25 @@ def test_install_marker(
     assert index_check(marker_index, elem_index)
     assert pos_check(marker_position, elem_position)
     assert ret_name == expected_marker_name
+
+
+def test_install_marker_missing_element_raises(
+    loaded_interface: CoreMadInterface,
+) -> None:
+    """Installing a marker near a missing element should raise a clear error."""
+    with pytest.raises(
+        ValueError,
+        match=r"Element 'NOT_AN_ELEMENT' not found in loaded sequence",
+    ):
+        loaded_interface.install_marker("NOT_AN_ELEMENT")
+
+
+def test_replace_with_marker_missing_element_raises(
+    loaded_interface: CoreMadInterface,
+) -> None:
+    """Replacing a missing element should raise a clear error."""
+    with pytest.raises(ValueError, match=r"Could not find element: NOT_AN_ELEMENT"):
+        loaded_interface.replace_with_marker("NOT_AN_ELEMENT")
 
 
 def test_getset_variables(interface: CoreMadInterface) -> None:
@@ -229,60 +282,6 @@ def test_twiss(loaded_interface_with_beam: CoreMadInterface):
     assert abs(twiss_df.headers["q1"] - 62.28) < 3e-7, f"Unexpected Qx: {twiss_df.headers['q1']}"
     assert abs(twiss_df.headers["q2"] - 60.31) < 3e-7, f"Unexpected Qy: {twiss_df.headers['q2']}"
     interface.unobserve_elements(["BPM"])
-
-
-@pytest.mark.parametrize(
-    "target_qx,target_qy,qx_knob,qy_knob",
-    [
-        (0.2801, 0.3101, None, None),
-        (0.29, 0.32, "dqx_b1", "dqy_b1"),
-        (0.27, 0.30, None, None),
-    ],
-)
-def test_match_tunes(
-    loaded_interface_with_beam: CoreMadInterface,
-    target_qx: float,
-    target_qy: float,
-    qx_knob: str,
-    qy_knob: str,
-):
-    """Test matching tunes."""
-    interface = loaded_interface_with_beam
-    default_qx = qx_knob or "dqx_b1_op"
-    default_qy = qy_knob or "dqy_b1_op"
-    knobs = {
-        default_qx: interface.mad.MADX[default_qx],
-        default_qy: interface.mad.MADX[default_qy],
-    }
-    print("Initial knobs:", knobs)
-
-    kwargs = {}
-    if qx_knob:
-        kwargs["qx_knob"] = qx_knob
-    if qy_knob:
-        kwargs["qy_knob"] = qy_knob
-
-    new_knobs = interface.match_tunes(
-        target_qx=target_qx, target_qy=target_qy, **kwargs
-    )
-
-    twiss_df = interface.run_twiss()
-    assert abs((twiss_df.headers["q1"] % 1) - target_qx) < 1e-5, (
-        f"Qx not matched: {twiss_df.headers['q1'] % 1} != {target_qx}"
-    )
-    assert abs((twiss_df.headers["q2"] % 1) - target_qy) < 1e-5, (
-        f"Qy not matched: {twiss_df.headers['q2'] % 1} != {target_qy}"
-    )
-
-    # Check that knobs have been changed
-    for knob, old_value in knobs.items():
-        new_value = interface.mad.MADX[knob]
-        assert new_value != old_value, f"Knob {knob} value did not change"
-        assert new_value == new_knobs[knob], (
-            f"Returned knob value for {knob} does not match MAD value"
-        )
-
-
 
 def test_install_ac_dipole_and_twiss(loaded_ac_interface_with_beam) -> None:
     """Test AC dipole installation and verify that tunes change to driven values."""

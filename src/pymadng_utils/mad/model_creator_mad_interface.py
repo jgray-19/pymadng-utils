@@ -187,7 +187,6 @@ twiss_data:write("{self.model_dir / "twiss.dat"}", cols, hnams)
     def close(self) -> None:
         """Close the MAD-NG interface."""
         if self.mad is not None:
-            LOGGER.debug("Closing MAD interface")
             self.mad.close()
 
 
