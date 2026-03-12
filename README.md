@@ -1,6 +1,6 @@
 # pymadng-utils
 
-[![codecov](https://codecov.io/gh/jgray-19/pymadng-utils/branch/main/graph/badge.svg)](https://codecov.io/gh/jgray-19/pymadng-utils)
+[![codecov](https://codecov.io/gh/jgray-19/pymadng-utils/graph/badge.svg?token=L1EV8MDM6M)](https://codecov.io/gh/jgray-19/pymadng-utils)
 
 General-purpose utilities based on MAD-NG via `pymadng`, including model creation helpers migrated from `sgd-magnet-tuner`.
 
