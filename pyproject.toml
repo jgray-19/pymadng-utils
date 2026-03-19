@@ -38,6 +38,9 @@ package-dir = {"" = "src"}
 where = ["src"]
 include = ["pymadng_utils*"]
 
+[tool.setuptools.package-data]
+pymadng_utils = ["mad_scripts/*.mad"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = ["tests/data"]
