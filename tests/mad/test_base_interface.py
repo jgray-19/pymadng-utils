@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 
 from pymadng_utils.accelerators import LHC
-from pymadng_utils.mad import AcDipoleMadInterface
 from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
 from tests.mad.helpers import (
     check_beam_setup,
@@ -36,7 +35,7 @@ class MissingSequenceLHC(LHC):
 @pytest.fixture(scope="function")
 def loaded_ac_interface_with_beam(seq_b1: Path):
     """Fixture that returns an AC-capable interface with sequence loaded and beam set up."""
-    interface = AcDipoleMadInterface(
+    interface = AcceleratorMadInterface(
         accelerator=LHC(beam=1, sequence_file=seq_b1, pc=6800.0)
     )
     yield interface

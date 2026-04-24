@@ -9,7 +9,6 @@ Overview
 * ``AcceleratorMadInterface`` exposes sequence loading, beam setup, variable management, marker installation, TWISS execution, magnet perturbations, and orbit correction.
 * ``AcceleratorErrorsMadInterface`` is the opt-in variant that applies accelerator-defined startup errors after loading the sequence.
 * ``KnobMadInterface`` adds helpers for applying corrector tables and knob files.
-* ``AcDipoleMadInterface`` is the deprecated compatibility alias for AC-dipole-capable usage.
 * ``ModelCreatorMadInterface`` specialises the interface stack for model-export workflows.
 
 Interface layering

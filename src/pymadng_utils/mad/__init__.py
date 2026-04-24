@@ -3,17 +3,13 @@
 from .accelerator_mad_interface import (
     AcceleratorErrorsMadInterface,
     AcceleratorMadInterface,
-    AcDipoleMadInterface,
-    CoreMadInterface,
 )
 from .knob_mad_interface import KnobMadInterface
 
 __all__ = [
     "AcceleratorMadInterface",
     "AcceleratorErrorsMadInterface",
-    "CoreMadInterface",
     "KnobMadInterface",
-    "AcDipoleMadInterface",
     "ModelCreatorMadInterface",
 ]
 

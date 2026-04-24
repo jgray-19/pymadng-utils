@@ -138,14 +138,14 @@ def test_set_corrector_strengths_missing_file_is_noop(
     assert knob_interface_with_beam.mad.MADX.dqy_b1_op == before_qy
 
 
-def test_set_tune_knobs_reads_knob_file(
+def test_set_knobs_reads_knob_file(
     knob_interface_with_beam: KnobMadInterface, tmp_path: Path
 ) -> None:
-    """Tune knobs should be read from file and applied in the MADX environment."""
+    """Knob files should be read and applied in the MADX environment."""
     knob_file = tmp_path / "tune_knobs.txt"
     knob_file.write_text("dqx_b1_op\t4.000000e-04\ndqy_b1_op\t-6.000000e-04\n")
 
-    knob_interface_with_beam.set_tune_knobs(knob_file)
+    knob_interface_with_beam.set_knobs(knob_file)
 
     assert knob_interface_with_beam.mad.MADX.dqx_b1_op == pytest.approx(4.0e-4)
     assert knob_interface_with_beam.mad.MADX.dqy_b1_op == pytest.approx(-6.0e-4)

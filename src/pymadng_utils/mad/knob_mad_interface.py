@@ -98,13 +98,6 @@ class KnobMadInterface(AcceleratorMadInterface):
         self.mad.send(f"{self.py_name}:send(true)")
         assert self.mad.recv(), "Failed to set corrector strengths"
 
-    def set_tune_knobs(self, knobs_file: str | Path) -> None:
-        """Load and set predefined tune knobs from file - deprecated in favor set_knobs."""
-        logger.warning(
-            "set_tune_knobs is deprecated, use set_knobs instead for more general knob setting"
-        )
-        self.set_knobs(knobs_file)
-
     def set_knobs(self, knobs_file: str | Path) -> None:
         """Load and set predefined knobs from file."""
         path = Path(knobs_file)

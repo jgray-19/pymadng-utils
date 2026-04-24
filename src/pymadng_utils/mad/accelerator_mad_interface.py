@@ -14,7 +14,6 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import deprecated
 import numpy as np
 from pymadng import MAD
 
@@ -630,27 +629,6 @@ loaded_sequence:install{{
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Exit context manager and close MAD interface."""
         self.close()
-
-
-@deprecated.deprecated(
-    reason="Use AcceleratorMadInterface directly instead of CoreMadInterface alias",
-    version="0.2.0",
-)
-class CoreMadInterface(AcceleratorMadInterface):
-    """Backward-compatible alias for AcceleratorMadInterface."""
-
-    pass
-
-
-@deprecated.deprecated(
-    reason="Use AcceleratorMadInterface directly instead of AcDipoleMadInterface alias",
-    version="0.2.0",
-)
-class AcDipoleMadInterface(AcceleratorMadInterface):
-    """Backward-compatible alias for AcceleratorMadInterface with AC dipole methods."""
-
-    pass
-
 
 class AcceleratorErrorsMadInterface(AcceleratorMadInterface):
     """MAD interface variant that applies accelerator-specific startup errors."""
