@@ -6,10 +6,20 @@ MAD-NG Interfaces
 Overview
 --------
 
-* ``CoreMadInterface`` exposes sequence loading, beam setup, variable management, marker installation, and TWISS execution.
-* ``KnobMadInterface`` adds helpers for applying corrector tables and tune-knob files.
-* ``AcDipoleMadInterface`` extends the core interface with AC-dipole installation.
-* ``ModelCreatorMadInterface`` and ``LhcModelCreatorMadInterface`` specialise the interface stack for model-export workflows.
+* ``AcceleratorMadInterface`` exposes sequence loading, beam setup, variable management, marker installation, TWISS execution, magnet perturbations, and orbit correction.
+* ``AcceleratorErrorsMadInterface`` is the opt-in variant that applies accelerator-defined startup errors after loading the sequence.
+* ``KnobMadInterface`` adds helpers for applying corrector tables and knob files.
+* ``AcDipoleMadInterface`` is the deprecated compatibility alias for AC-dipole-capable usage.
+* ``ModelCreatorMadInterface`` specialises the interface stack for model-export workflows.
+
+Interface layering
+------------------
+
+The MAD interface stack is intentionally split:
+
+* Use ``AcceleratorMadInterface`` when you want a clean loaded machine with no automatic machine-specific error application.
+* Use ``AcceleratorErrorsMadInterface`` when the accelerator descriptor provides an ``apply_accelerator_specific_errors`` hook and you want that hook executed automatically.
+* Use ``KnobMadInterface`` or ``ModelCreatorMadInterface`` on top when the workflow also needs corrector-file, knob-file, or export helpers.
 
 Package exports
 ---------------
@@ -22,7 +32,7 @@ Package exports
 Core interface
 --------------
 
-.. automodule:: pymadng_utils.mad.core_mad_interface
+.. automodule:: pymadng_utils.mad.accelerator_mad_interface
    :members:
    :undoc-members:
    :show-inheritance:

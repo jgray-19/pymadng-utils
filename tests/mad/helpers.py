@@ -10,7 +10,7 @@ import contextlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pymadng_utils.mad.core_mad_interface import CoreMadInterface
+    from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
 
 
 def _recv_n(mad: Any, n: int) -> list[Any]:
@@ -33,29 +33,31 @@ def cleanup_interface(interface: Any) -> None:
         del interface
 
 
-def check_sequence_loaded(interface: CoreMadInterface, seq_name: str = "lhcb1") -> None:
+def check_sequence_loaded(
+    interface: AcceleratorMadInterface, seq_name: str = "lhcb1"
+) -> None:
     """Check that sequence is loaded correctly."""
     assert seq_name == interface.mad.SEQ_NAME
     assert interface.mad.loaded_sequence is not None
 
 
 def check_beam_setup(
-    interface: CoreMadInterface,
+    interface: AcceleratorMadInterface,
     particle: str = "proton",
-    energy: float | None = None,
+    pc: float | None = None,
     charge: int = 1,
     spin: float = 0.5,
 ) -> None:
     """Check beam setup properties."""
     assert particle == interface.mad.loaded_sequence.beam.particle
-    if energy is not None:
-        assert energy == interface.mad.loaded_sequence.beam.energy
+    if pc is not None:
+        assert pc == interface.mad.loaded_sequence.beam.pc
     assert charge == interface.mad.loaded_sequence.beam.charge
     assert spin == interface.mad.loaded_sequence.beam.spin
 
 
 def check_element_observations(
-    interface: CoreMadInterface,
+    interface: AcceleratorMadInterface,
     condition: str,
 ) -> None:
     """Helper to check element observations in MAD."""
@@ -78,7 +80,7 @@ py:send("PASS")""")
 
 
 def get_marker_and_element_positions(
-    interface: CoreMadInterface, marker_name: str, element_name: str
+    interface: AcceleratorMadInterface, marker_name: str, element_name: str
 ) -> tuple[int | float, int, int | float, int]:
     """Helper to get positions and indices of marker and element."""
     interface.mad.send(f"""

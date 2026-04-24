@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from pymadng_utils.accelerators import LHC
 from pymadng_utils.mad.model_creator_mad_interface import ModelCreatorMadInterface
 
 
@@ -19,13 +20,11 @@ def model_file(seq_b1: Path, tmp_path: Path) -> Path:
 @pytest.fixture
 def model_interface(model_file: Path, tmp_path: Path):
     """Create a real model-creator interface using the test sequence."""
+    accel = LHC(beam=1, pc=6800.0, sequence_file=model_file)
     interface = ModelCreatorMadInterface(
         model_dir=tmp_path,
-        madx_file_path=model_file,
-        seq_name="lhcb1",
-        energy=6800.0,
+        accelerator=accel,
         tunes=[0.28, 0.31],
-        tune_knobs={"q1": "dqx_b1_op", "q2": "dqy_b1_op"},
     )
     yield interface
     with contextlib.suppress(Exception):
@@ -36,14 +35,12 @@ def test_model_creator_init_requires_existing_sequence(tmp_path: Path) -> None:
     """The interface should fail fast when the saved sequence file is missing."""
     missing_file = tmp_path / "missing.seq"
 
-    with pytest.raises(FileNotFoundError, match="Saved sequence file not found"):
+
+    with pytest.raises(FileNotFoundError, match="Sequence file not found"):
         ModelCreatorMadInterface(
             model_dir=tmp_path,
-            madx_file_path=missing_file,
-            seq_name="lhcb1",
-            energy=6800.0,
+            accelerator=LHC(beam=1, pc=6800.0, sequence_file=missing_file),
             tunes=[0.28, 0.31],
-            tune_knobs={"q1": "dqx_b1_op", "q2": "dqy_b1_op"},
         )
 
 
@@ -52,15 +49,14 @@ def test_model_creator_init_loads_sequence_and_beam(
 ) -> None:
     """Initialization should load the sequence, set the beam, and keep config values."""
     assert model_interface.model_dir == tmp_path
-    assert model_interface.madx_file == model_file
-    assert model_interface.seq_name == "lhcb1"
-    assert model_interface.energy == 6800.0
+    assert model_interface.accelerator.sequence_file == model_file
+    assert model_interface.accelerator.pc == 6800.0
     assert model_interface.tunes == [0.28, 0.31]
-    assert model_interface.tune_knobs == {"q1": "dqx_b1_op", "q2": "dqy_b1_op"}
+    assert model_interface.accelerator.tune_variables == ("dqx_b1_op", "dqy_b1_op")
     assert model_interface.mad.SEQ_NAME == "lhcb1"
     assert model_interface.mad.loaded_sequence is not None
     assert model_interface.mad.loaded_sequence.beam.particle == "proton"
-    assert model_interface.mad.loaded_sequence.beam.energy == 6800.0
+    assert model_interface.mad.loaded_sequence.beam.pc == 6800.0
 
 
 def test_get_current_tunes_reads_real_twiss(

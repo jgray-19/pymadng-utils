@@ -1,7 +1,7 @@
 """
-Tests for CoreMadInterface.
+Tests for AcceleratorMadInterface.
 
-This module contains pytest tests for the CoreMadInterface class.
+This module contains pytest tests for the AcceleratorMadInterface class.
 """
 
 from __future__ import annotations
@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
+from pymadng_utils.accelerators import LHC
 from pymadng_utils.mad import AcDipoleMadInterface
-from pymadng_utils.mad.core_mad_interface import CoreMadInterface
+from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
 from tests.mad.helpers import (
     check_beam_setup,
     check_element_observations,
@@ -26,37 +27,35 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+class MissingSequenceLHC(LHC):
+    @property
+    def seq_name(self) -> str:
+        return "does_not_exist"
+
+
 @pytest.fixture(scope="function")
 def loaded_ac_interface_with_beam(seq_b1: Path):
     """Fixture that returns an AC-capable interface with sequence loaded and beam set up."""
-    interface = AcDipoleMadInterface()
-    interface.load_sequence(seq_b1, "lhcb1")
-    interface.setup_beam(particle="proton", beam_energy=6800.0)
+    interface = AcDipoleMadInterface(
+        accelerator=LHC(beam=1, sequence_file=seq_b1, pc=6800.0)
+    )
     yield interface
     interface.close()
 
 
-@pytest.mark.parametrize(
-    "py_name, expected_py_name, var_name, var_value",
-    [
-        (None, "py", "a", 2),
-        ("test_py", "test_py", "b", 3),
-    ],
-    ids=["default_py_name", "custom_py_name"],
-)
-def test_init(py_name, expected_py_name, var_name, var_value) -> None:
-    """Test initialization of CoreMadInterface."""
-    interface = CoreMadInterface() if py_name is None else CoreMadInterface(py_name=py_name)
-    check_interface_basic_init(interface, expected_py_name)
-    interface.mad.send(f"{var_name} = {var_value}")
-    assert getattr(interface.mad, var_name) == var_value
+def test_init(seq_b1: Path) -> None:
+    """Test initialization of AcceleratorMadInterface."""
+    interface = AcceleratorMadInterface(
+        accelerator=LHC(beam=1, sequence_file=seq_b1, pc=6800.0)
+    )
+    check_interface_basic_init(interface, "py")
+    interface.mad.send("a = 2")
+    assert interface.mad.a == 2
     cleanup_interface(interface)
 
 
-def test_load_sequence(interface: CoreMadInterface, seq_b1: Path) -> None:
-    """Test loading a sequence file."""
-    # this test explicitly checks load_sequence behaviour
-    interface.load_sequence(seq_b1, "lhcb1")
+def test_load_sequence(interface: AcceleratorMadInterface) -> None:
+    """Test loading a sequence file during initialisation."""
     check_sequence_loaded(interface, "lhcb1")
     assert (
         interface.mad.loaded_sequence is not None and interface.mad.loaded_sequence != 0
@@ -64,20 +63,18 @@ def test_load_sequence(interface: CoreMadInterface, seq_b1: Path) -> None:
     assert interface.mad.MADX.lhcb1 is not None and interface.mad.MADX.lhcb1 != 0
 
 
-def test_load_sequence_unknown_sequence_raises(
-    interface: CoreMadInterface, seq_b1: Path
-) -> None:
+def test_load_sequence_unknown_sequence_raises(seq_b1: Path) -> None:
     """Loading a valid file with a missing sequence name should fail clearly."""
     with pytest.raises(
         ValueError,
         match=r"Sequence 'does_not_exist' not found in MAD file",
     ):
-        interface.load_sequence(seq_b1, "does_not_exist")
+        AcceleratorMadInterface(
+            accelerator=MissingSequenceLHC(beam=1, sequence_file=seq_b1, pc=6800.0)
+        )
 
 
-def test_load_sequence_bad_file_raises(
-    interface: CoreMadInterface, tmp_path: Path
-) -> None:
+def test_load_sequence_bad_file_raises(tmp_path: Path) -> None:
     """Loading an invalid sequence file should fail through the missing-sequence check."""
     bad_sequence = tmp_path / "bad.seq"
     bad_sequence.write_text("this is not a MAD-X sequence\n")
@@ -86,15 +83,14 @@ def test_load_sequence_bad_file_raises(
         ValueError,
         match=r"Sequence 'lhcb1' not found in MAD file",
     ):
-        interface.load_sequence(bad_sequence, "lhcb1")
+        AcceleratorMadInterface(
+            accelerator=LHC(beam=1, sequence_file=bad_sequence, pc=6800.0)
+        )
 
 
-@pytest.mark.parametrize("energy", [6500.0, 7000.0])
-def test_setup_beam(loaded_interface: CoreMadInterface, energy) -> None:
-    """Test setting up beam parameters."""
-    interface = loaded_interface
-    interface.setup_beam(particle="proton", beam_energy=energy)
-    check_beam_setup(interface, particle="proton", energy=energy)
+def test_setup_beam(loaded_interface: AcceleratorMadInterface) -> None:
+    """Test beam parameters from the accelerator descriptor are applied."""
+    check_beam_setup(loaded_interface, particle="proton", pc=6800.0)
 
 
 @pytest.mark.parametrize(
@@ -103,16 +99,16 @@ def test_setup_beam(loaded_interface: CoreMadInterface, energy) -> None:
     ids=["SingleElement", "BPMElements"],
 )
 def test_observe_elements(
-    loaded_interface: CoreMadInterface,
+    loaded_interface: AcceleratorMadInterface,
     pattern: str,
 ) -> None:
     """Test configuring element observation."""
-    loaded_interface.observe_elements(pattern)
+    loaded_interface.observe(pattern)
     check_element_observations(loaded_interface, f"elm.name:match('{pattern}')")
     loaded_interface.unobserve_elements([pattern])
 
 
-def test_cycle_sequence(loaded_interface: CoreMadInterface) -> None:
+def test_cycle_sequence(loaded_interface: AcceleratorMadInterface) -> None:
     """Test cycling sequence to a marker."""
     loaded_interface.mad.send("""py:send(loaded_sequence:raw_get("__cycle"))""")
     assert loaded_interface.mad.recv() is None
@@ -129,7 +125,7 @@ def test_cycle_sequence(loaded_interface: CoreMadInterface) -> None:
 
 
 def test_cycle_sequence_invalid_marker_raises(
-    loaded_interface: CoreMadInterface,
+    loaded_interface: AcceleratorMadInterface,
 ) -> None:
     """Cycling to a missing marker should raise the wrapped runtime error."""
     with pytest.raises(
@@ -161,7 +157,7 @@ def test_cycle_sequence_invalid_marker_raises(
     ids=["default_marker", "custom_marker"],
 )
 def test_install_marker(
-    loaded_interface: CoreMadInterface,
+    loaded_interface: AcceleratorMadInterface,
     element,
     marker_name,
     offset,
@@ -186,7 +182,7 @@ def test_install_marker(
 
 
 def test_install_marker_missing_element_raises(
-    loaded_interface: CoreMadInterface,
+    loaded_interface: AcceleratorMadInterface,
 ) -> None:
     """Installing a marker near a missing element should raise a clear error."""
     with pytest.raises(
@@ -197,14 +193,14 @@ def test_install_marker_missing_element_raises(
 
 
 def test_replace_with_marker_missing_element_raises(
-    loaded_interface: CoreMadInterface,
+    loaded_interface: AcceleratorMadInterface,
 ) -> None:
     """Replacing a missing element should raise a clear error."""
     with pytest.raises(ValueError, match=r"Could not find element: NOT_AN_ELEMENT"):
         loaded_interface.replace_with_marker("NOT_AN_ELEMENT")
 
 
-def test_getset_variables(interface: CoreMadInterface) -> None:
+def test_getset_variables(interface: AcceleratorMadInterface) -> None:
     """Test setting MAD variables."""
     interface.set_variables(**{"KQTL_1L1_B1": 1.2, "KQTL_1L2_B1": 2.3})
     assert interface.mad.KQTL_1L1_B1 == 1.2
@@ -215,13 +211,13 @@ def test_getset_variables(interface: CoreMadInterface) -> None:
     assert v2 == 2.3
 
 
-def test_set_madx_variables(interface: CoreMadInterface) -> None:
+def test_set_madx_variables(interface: AcceleratorMadInterface) -> None:
     """Test setting MAD-X variables."""
     interface.set_madx_variables(**{"kqtl_1l1_b1": 1.5, "KQTL_1L2_B1": 2.5})
     assert interface.mad.MADX.KQTL_1L1_B1 == 1.5
     assert interface.mad.MADX.kqtl_1l2_b1 == 2.5
 
-def test_twiss(loaded_interface_with_beam: CoreMadInterface):
+def test_twiss(loaded_interface_with_beam: AcceleratorMadInterface):
     """Test twiss function."""
     interface = loaded_interface_with_beam
     twiss_df = interface.run_twiss()
@@ -272,7 +268,7 @@ def test_twiss(loaded_interface_with_beam: CoreMadInterface):
     assert abs(twiss_df.headers["q2"] - 60.31) < 3e-7, f"Unexpected Qy: {twiss_df.headers['q2']}"
 
     # Now observe BPMs
-    interface.observe_elements("BPM")
+    interface.observe("BPM")
     twiss_df = interface.run_twiss()
     # There should only be BPMs observed
     assert len(twiss_df) == 563, f"Expected 563 twiss entries, got {len(twiss_df)}"
@@ -293,15 +289,12 @@ def test_install_ac_dipole_and_twiss(loaded_ac_interface_with_beam) -> None:
     nat_qy = tws.headers["q2"] % 1
 
     # Define AC dipole parameters
-    ac_marker = "MKQA.6L4.B1"
     nat_tunes = (nat_qx, nat_qy)
     drv_tunes = (0.27, 0.322)
-    # Use small positive offset to avoid overlapping with marker element
-    ac_offset = 1.583 / 2  # Standard AC dipole offset
 
     # Install AC dipole
     interface.install_ac_dipole(
-        marker_name=ac_marker, nat_tunes=nat_tunes, drv_tunes=drv_tunes, offset=ac_offset
+        nat_tunes=nat_tunes, drv_tunes=drv_tunes
     )
 
     # Run twiss after AC dipole installation

@@ -1,0 +1,72 @@
+"""Minimal accelerator definitions for MAD-facing helpers."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Any
+
+PROTON_MASS_GEV = 0.9382720813
+
+
+class Accelerator(ABC):
+    """Small accelerator descriptor modelled on ``aba_optimiser``.
+
+    The repository only needs the machine-specific fields that the MAD-NG ACD
+    driver consumes directly: sequence path, MAD sequence name, beam energy and
+    BPM pattern.
+    """
+
+    def __init__(
+        self,
+        sequence_file: Path | str,
+        pc: float,
+        bpm_pattern: str = "BPM",
+        particle: str = "proton",
+    ) -> None:
+        self.sequence_file = Path(sequence_file)
+        self.pc = float(pc)
+        self.bpm_pattern = str(bpm_pattern)
+        self.particle = str(particle)
+
+    @property
+    @abstractmethod
+    def seq_name(self) -> str:
+        """Return the sequence name for this accelerator.
+
+        Returns:
+            Sequence name to use in MAD
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def ac_dipole_location(self) -> tuple[str, float]:
+        """Return the AC-dipole exciter marker and the offset from the marker for installation."""
+        pass
+
+    @property
+    @abstractmethod
+    def get_exciter_bpm(self) -> tuple[str, str]:
+        """Return the two BPM names adjacent to the exciter."""
+        pass
+
+    @property
+    @abstractmethod
+    def tune_variables(self) -> tuple[str, str]:
+        """Return (qx_knob, qy_knob) MAD-X variable names for tune matching."""
+        pass
+
+    @property
+    @abstractmethod
+    def tune_integers(self) -> tuple[int, int]:
+        """Return (qx_integer, qy_integer) used for full tune targets."""
+        pass
+
+    def apply_accelerator_specific_errors(self, mad_iface: Any) -> None:
+        """Apply machine-specific startup errors to a loaded MAD sequence."""
+        del mad_iface
+
+    def get_perturbation_families(self) -> dict[str, dict[str, str | float | dict]]:
+        """Return per-family perturbation metadata keyed by family code d/q/s."""
+        return {}

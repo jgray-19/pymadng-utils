@@ -2,8 +2,9 @@ import pandas as pd
 import pytest
 import tfs
 
-from pymadng_utils.lhc_model_creator.create_models import create_lhc_model
-from pymadng_utils.mad.core_mad_interface import CoreMadInterface
+from pymadng_utils.accelerators import LHC
+from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
+from pymadng_utils.model_creator.create_models import create_lhc_model
 
 
 @pytest.fixture
@@ -75,13 +76,13 @@ def test_create_lhc_models(beam, temp_model_dir, acc_models_path):
     )
 
     # Test loading sequence and running twiss with MadCoreInterface
-    mad = CoreMadInterface()
     sequence_file = model_dir / f"lhcb{beam}_saved.seq"
-    mad.load_sequence(sequence_file, f"lhcb{beam}")
-    mad.setup_beam(beam_energy=6800)
+    mad = AcceleratorMadInterface(
+        accelerator=LHC(beam=beam, sequence_file=sequence_file, pc=6800.0)
+    )
 
     # Run twiss
-    mad.observe_elements("IP.")
+    mad.observe("IP.")
     twiss_result = mad.run_twiss()
 
     assert abs(twiss_result.q1 % 1 - nat_tunes[0]) < 1e-6, (
@@ -108,8 +109,8 @@ def test_create_lhc_models(beam, temp_model_dir, acc_models_path):
 
     # Check that twiss.dat matches the run twiss
     # Compare key columns
-    mad.unobserve_elements(["IP."])
-    mad.observe_elements("BPM")
+    mad.unobserve("IP.")
+    mad.observe("BPM")
     twiss_result = mad.run_twiss(coupling=True)
     twiss_result.columns = [
         col.upper() for col in twiss_result.columns

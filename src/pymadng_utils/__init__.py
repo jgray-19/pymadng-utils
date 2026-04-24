@@ -1,9 +1,10 @@
-"""Utilities for working with MAD-NG, MAD-X, and LHC model workflows."""
+"""Utilities for working with accelerator descriptors, MAD-NG, MAD-X, and model workflows."""
 
 __all__ = [
+    "accelerators",
     "config",
     "io",
     "mad",
     "madx",
-    "lhc_model_creator",
+    "model_creator",
 ]

@@ -7,8 +7,9 @@ This reference is organised by package area. Start with the top-level package fo
    :maxdepth: 2
 
    package
+   accelerators
    config
    io
    mad
    madx
-   lhc_model_creator
+   model_creator

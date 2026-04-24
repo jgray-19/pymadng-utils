@@ -1,0 +1,660 @@
+"""MAD-NG interfaces with a small, composable class hierarchy.
+
+The module defines:
+- ``AcceleratorMadInterface``: Base class providing core MAD-NG operations like sequence loading, beam setup, variable management, marker installation, and TWISS execution.
+
+
+Backward-compatible aliases are kept for existing imports.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import deprecated
+import numpy as np
+from pymadng import MAD
+
+from pymadng_utils.config import SHUSHING_SCRIPT
+
+if TYPE_CHECKING:
+    import pandas as pd
+
+    from pymadng_utils.accelerators.base import Accelerator
+
+logger = logging.getLogger(__name__)
+
+_MAGNET_STRENGTH_SUFFIXES = {".k0", ".k1", ".k2", ".kick"}
+_DKNL_INDEX_BY_ATTR_LUA = {"k0": 1, "k1": 2, "k2": 3}
+_DKNL_STRENGTH_ATTRS = frozenset(_DKNL_INDEX_BY_ATTR_LUA)
+_PERTURBATION_BASE_SPECS: dict[str, dict[str, Any]] = {
+    "d": {"kind": ("sbend", "rbend"), "attr": "k0"},
+    "q": {"kind": ("quadrupole",), "attr": "k1"},
+    "s": {"kind": ("sextupole",), "attr": "k2"},
+}
+
+
+class AcceleratorMadInterface:
+    """
+    Base class for MAD-NG interfaces providing core functionality.
+
+    This class provides essential MAD-NG operations without automatic
+    initialization, allowing subclasses to customise setup as needed.
+    """
+
+    def __init__(self, accelerator: Accelerator, **mad_kwargs):
+        """
+        Initialise base MAD interface.
+
+        Args:
+            accelerator: Accelerator configuration object
+            **mad_kwargs: Keyword arguments passed to pymadng.MAD()
+        """
+        self.accelerator = accelerator
+        self.mad = MAD(**mad_kwargs)
+        logger.debug("Initialised MAD core interface")
+        self.py_name = self.mad.py_name
+        self.mad.send(SHUSHING_SCRIPT.read_text())
+        self.mad.send("__observed_flag__ = MAD.element.flags.observed")
+
+        # Load the default sequence and set up the beam immediately, as these are common to all workflows.
+        self.setup_sequence()
+
+    def load_sequence(self) -> None:
+        """
+        Load a sequence file into MAD-NG from the accelerator configuration.
+        """
+        logger.debug(f"Loading sequence from {self.accelerator.sequence_file}")
+        file_path = Path(self.accelerator.sequence_file).resolve()
+        if not file_path.exists():
+            raise FileNotFoundError(f"Sequence file not found: {file_path}")
+        # self.mad.send("shush()")
+
+        logger.debug("Caching MAD translation for faster subsequent loads")
+        mad_cache_path = file_path.with_suffix(".mad")
+        self.mad.send(f'MADX:load("{file_path}", "{mad_cache_path}")')
+
+        if self.mad.MADX[self.accelerator.seq_name] == 0:
+            raise ValueError(
+                f"Sequence '{self.accelerator.seq_name}' not found in MAD file '{self.accelerator.sequence_file}'"
+            )
+        self.mad.send(f"loaded_sequence = MADX.{self.accelerator.seq_name}")
+        self.mad["SEQ_NAME"] = self.accelerator.seq_name
+        # self.mad.send("unshush()")
+
+    def setup_beam(self) -> None:
+        """
+        Set up beam parameters in MAD-NG based on the accelerator configuration.
+        """
+        self.mad.send(
+            f'loaded_sequence.beam = beam {{ particle = "{self.accelerator.particle}", pc={self.accelerator.pc:.15e} }}',
+        )
+        logger.debug(
+            f"Setting beam: particle={self.accelerator.particle}, pc={self.accelerator.pc:.15e} GeV/c"
+        )
+
+    def setup_sequence(self) -> None:
+        """
+        Load the sequence and set up the beam in MAD-NG.
+
+        This method combines sequence loading and beam setup for convenience.
+        """
+        self.load_sequence()
+        self.setup_beam()
+
+    def unobserve_all_elements(self) -> None:
+        """Unobserve all elements in the loaded sequence."""
+        self.mad.send("loaded_sequence:deselect(__observed_flag__)")
+
+    def observe(self, pattern: str | None = None, unobserve_first: bool = True) -> None:
+        """
+        Configure element observation for tracking.
+
+        Args:
+            pattern: Pattern to match elements for observation (default: None, which uses the accelerator's BPM pattern)
+            unobserve_first: Whether to unobserve all elements before observing the new pattern (default: True)
+        """
+        if pattern is None:
+            pattern = self.accelerator.bpm_pattern
+        logger.debug(f"Setting observation pattern: {pattern}")
+        if unobserve_first:
+            self.unobserve_all_elements()
+        self.mad.send(
+            f"loaded_sequence:select(__observed_flag__, {{pattern='{pattern}'}})"
+        )
+
+    def unobserve(self, pattern: str | None = None) -> None:
+        """
+        Remove observation for elements matching a pattern.
+
+        Args:
+            pattern: Pattern to match elements for unobserving, (default: None, which uses the accelerator's BPM pattern)
+        """
+        if pattern is None:
+            pattern = self.accelerator.bpm_pattern
+        logger.debug(f"Unobserving elements matching pattern: {pattern}")
+        self.mad.send(
+            f"loaded_sequence:deselect(__observed_flag__, {{pattern='{pattern}'}})"
+        )
+
+    def unobserve_elements(self, elements: list[str]) -> None:
+        """
+        Remove specific elements from observation.
+
+        Args:
+            elements: List of element names to unobserve
+        """
+        for elm in elements:
+            self.unobserve(elm)
+
+    def observe_elements(
+        self, patterns: list[str], unobserve_first: bool = True
+    ) -> None:
+        if unobserve_first:
+            self.unobserve_all_elements()
+        for pattern in patterns:
+            self.observe(pattern, unobserve_first=False)
+
+    def cycle_sequence(self, marker_name: str | None = None) -> None:
+        """
+        Cycle sequence to start from a specific marker.
+
+        Args:
+            marker_name: Name of marker to cycle to
+        """
+        logger.debug(f"Cycling sequence to start from {marker_name}")
+        success_script = f"\n{self.py_name}:send(true)\n"
+        if marker_name is None:
+            self.mad.send("loaded_sequence:cycle()" + success_script)
+        else:
+            self.mad.send(f"loaded_sequence:cycle('{marker_name}')" + success_script)
+        try:
+            assert self.mad.recv(), (
+                "Sequence cycling failed, you may have left something in the pipe."
+            )
+        except RuntimeError as e:
+            logger.error(f"Error during sequence cycling: {e}")
+            raise RuntimeError("Cycle failed - check MAD output for details") from e
+
+    def replace_with_marker(
+        self, element_name: str, marker_name: str | None = None
+    ) -> str:
+        """
+        Replace an element with a marker.
+
+        Args:
+            element_name: Name of the element to replace
+            marker_name: Name of the new marker
+
+        Returns:
+            str: The name of the marker that replaces the original element.
+        """
+        if marker_name is None:
+            marker_name = element_name
+
+        self.mad.send(f"""
+correct_elm = MADX['{element_name}']
+{self.py_name}:send(correct_elm)
+{self.py_name}:send({{correct_elm.refpos or (loaded_sequence.refer or "centre"), correct_elm.l}}, true)
+        """)
+        elm = self.mad.recv("correct_elm")
+        details = self.mad.recv()
+        if elm == 0:
+            raise ValueError(f"Could not find element: {element_name}")
+        if details[0] != "centre" and details[1] > 0:
+            raise ValueError(
+                "Replacing markers currently not supported with non-centre reference or non-zero length"
+            )
+        self.mad.send(f"""
+local new_elm = MAD.element.marker '{marker_name}' {{ at=correct_elm.at, from=correct_elm.from }}
+local replaced = loaded_sequence:replace({{new_elm}}, '{element_name}')
+MADX['{element_name}'] = new_elm ! Replace in the madx environment for later reference
+{self.py_name}:send(replaced and #replaced or 0)
+correct_elm = nil
+        """)
+        if (n_replaced := self.mad.recv()) != 1:
+            raise ValueError(
+                f"Element replacement failed, replaced {n_replaced} elements instead of 1"
+            )
+
+        return marker_name
+
+    def install_marker(
+        self, element_name: str, marker_name: str | None = None, offset: float = -1e-10
+    ) -> str:
+        """
+        Install a marker element near an existing element.
+
+        Args:
+            element_name: Name of reference element
+            marker_name: Name for new marker (auto-generated if None)
+            offset: Offset from reference element
+
+        Returns:
+            Name of the installed marker
+        """
+        if marker_name is None:
+            marker_name = f"{element_name}_marker"
+
+        elm_idx = self.mad.send(
+            f"{self.py_name}:send(loaded_sequence:index_of('{element_name}'))"
+        ).recv()
+        if elm_idx is None:
+            raise ValueError(f"Element '{element_name}' not found in loaded sequence")
+        if elm_idx <= 2:
+            # First index is always $start marker, second is first real element
+            offset = 1e-10  # Can't go before the first element -> MAD-NG bug
+
+        quoted_marker = self.mad.quote_strings(marker_name)
+        logger.debug(f"Installing marker {marker_name} at {element_name}")
+
+        self.mad.send(f"""
+loaded_sequence:install{{
+MAD.element.marker {quoted_marker} {{ at={offset}, from="{element_name}" }}
+}}
+""")
+        self.check_madng_succeded(f"Failed to install marker '{marker_name}' near element '{element_name}'")
+        return marker_name
+
+    def run_twiss(self, **twiss_kwargs) -> pd.DataFrame:
+        """
+        Run TWISS calculation and return results. If 'observe' is not specified,
+        it defaults to 1 (observing observed elements every turn).
+
+        Args:
+            **twiss_kwargs: Additional arguments for twiss calculation
+
+        Returns:
+            TFS DataFrame with twiss results
+        """
+        logger.debug("Running twiss calculation")
+        if "observe" not in twiss_kwargs:
+            twiss_kwargs["observe"] = 1  # Default to no observation if not set
+
+        try:
+            self.mad["tws", "flw"] = self.mad.twiss(
+                sequence="loaded_sequence", **twiss_kwargs
+            )
+        except ValueError as e:
+            logger.error(f"Error during twiss calculation: {e}")
+            raise RuntimeError("Twiss failed - check MAD output for details") from e
+
+        df = self.mad.tws.to_df()
+        if "name" in df.columns:
+            df.set_index("name", inplace=True)
+        return df
+
+    def set_variables(self, **kwargs) -> None:
+        """
+        Set multiple MAD variables.
+
+        Args:
+            **kwargs: Variable names and their values
+        """
+        self.mad.send_vars(**kwargs)
+
+    def _add_deferred_dknl(self, element_name: str) -> None:
+        """Ensure an element has a deferred dknl table for strength perturbations."""
+        self.mad.send(f"""
+if not MAD.typeid.is_deferred(loaded_sequence['{element_name}'].dknl) then
+    loaded_sequence['{element_name}'].dknl = MAD.typeid.deferred {{0.0, 0.0, 0.0, 0.0}}
+end
+        """)
+
+    def _set_dknl_component(self, element_name: str, attr: str, delta_strength: float) -> None:
+        """Store a strength delta in a dknl component."""
+        dknl_index = _DKNL_INDEX_BY_ATTR_LUA[attr]
+        if float(self.mad[f"loaded_sequence['{element_name}'].l"]) == 0.0:
+            raise ValueError(f"Cannot set dknl delta for element {element_name} with zero length")
+
+        self._add_deferred_dknl(element_name)
+        self.mad.send(f"""
+loaded_sequence['{element_name}'].dknl[{dknl_index}] = {self.py_name}:recv() * loaded_sequence['{element_name}'].l
+        """)
+        self.mad.send(delta_strength)
+
+    def _get_effective_element_strength(self, element_name: str, attr: str) -> float:
+        """Return the effective element strength, including dknl perturbations."""
+        if attr not in _DKNL_STRENGTH_ATTRS:
+            return float(self.mad[f"loaded_sequence['{element_name}'].{attr}"])
+
+        if float(self.mad[f"loaded_sequence['{element_name}'].l"]) == 0.0:
+            raise ValueError(
+                f"Cannot get effective strength for element {element_name} with zero length"
+            )
+        if len(self.mad.loaded_sequence[element_name].dknl) == 0:
+            return float(self.mad[f"loaded_sequence['{element_name}'].{attr}"])
+
+        dknl_index = _DKNL_INDEX_BY_ATTR_LUA[attr]
+        self.mad.send(f"""
+local l, dknl, {attr} in loaded_sequence['{element_name}']
+{self.py_name}:send({attr} + dknl[{dknl_index}] / l)
+        """)
+        return float(self.mad.recv())
+
+    def get_magnet_strengths(self, names: list[str]) -> dict[str, float]:
+        """Get effective magnet strengths, including dknl perturbations."""
+        strengths: dict[str, float] = {}
+        for name in names:
+            magnet_name, attr = name.rsplit(".", 1)
+            strengths[name] = self._get_effective_element_strength(magnet_name, attr)
+        return strengths
+
+    def _resolve_relative_error(
+        self,
+        family_config: dict[str, Any],
+        element_name: str,
+        rel_error: float | None,
+    ) -> float | None:
+        """Resolve the relative error for one element from global or family settings."""
+        if rel_error is not None:
+            return rel_error
+
+        relative_error_table = family_config.get("relative_error_table")
+        if isinstance(relative_error_table, dict):
+            for prefix, rel_value in relative_error_table.items():
+                if element_name.startswith(str(prefix)):
+                    return float(rel_value)
+
+        default_rel_std = family_config.get("default_rel_std")
+        if default_rel_std is not None:
+            return float(default_rel_std)
+        if relative_error_table is not None:
+            return None
+        raise ValueError(
+            f"Relative error not specified for family with kind {family_config['kind']}"
+        )
+
+    def apply_magnet_perturbations(
+        self,
+        rel_error: float | None = 1e-4,
+        seed: int = 42,
+        magnet_type: str | list[str] = "all",
+    ) -> tuple[dict[str, float], dict[str, float]]:
+        """Apply accelerator-specific perturbations to the loaded sequence."""
+        if magnet_type == "all":
+            requested = ["d", "q", "s"]
+        else:
+            requested = magnet_type if isinstance(magnet_type, list) else list(magnet_type)
+        if not requested:
+            return {}, {}
+
+        family_overrides = self.accelerator.get_perturbation_families()
+        family_configs = [
+            _PERTURBATION_BASE_SPECS[family] | family_overrides[family]
+            for family in ("d", "q", "s")
+            if family in requested and family in family_overrides
+        ]
+        if not family_configs:
+            return {}, {}
+
+        rng = np.random.default_rng(seed)
+        magnet_strengths: dict[str, float] = {}
+        true_strengths: dict[str, float] = {}
+
+        for elm in self.mad.loaded_sequence:
+            for family_config in family_configs:
+                if elm.kind not in family_config["kind"]:
+                    continue
+                pattern = family_config.get("pattern")
+                if pattern and not re.match(str(pattern), str(elm.name)):
+                    continue
+
+                element_rel_error = self._resolve_relative_error(
+                    family_config=family_config,
+                    element_name=str(elm.name),
+                    rel_error=rel_error,
+                )
+                if element_rel_error is None:
+                    continue
+
+                attr = str(family_config["attr"])
+                strength_before = float(elm[attr])
+                delta = float(rng.normal(0, abs(strength_before * element_rel_error)))
+                strength_after = strength_before + delta
+
+                if attr in _DKNL_STRENGTH_ATTRS:
+                    self._set_dknl_component(str(elm.name), attr, delta)
+                else:
+                    elm[attr] = strength_after
+
+                magnet_strengths[f"{elm.name}.{attr}"] = strength_after
+                true_strengths[str(elm.name)] = strength_after
+                break
+
+        return magnet_strengths, true_strengths
+
+    def set_madx_variables(self, **kwargs) -> None:
+        """
+        Set multiple MADX variables.
+
+        Args:
+            **kwargs: Variable names and their values
+        """
+        kwargs = {f"MADX['{key}']": value for key, value in kwargs.items()}
+        self.set_variables(**kwargs)
+
+    def get_variables(self, *names: str) -> tuple[float, ...]:
+        """
+        Get MAD variable values.
+
+        Args:
+            names: Variable names
+
+        Returns:
+            Variable values
+        """
+        return self.mad.recv_vars(*names, shallow_copy=True)
+
+    def check_madng_succeded(self, fail_message: str) -> None:
+        """Check if the last MAD-NG command succeeded, raise error if not."""
+        result = self.mad.send(f"{self.py_name}:send('success')").recv()
+        if result != "success":
+            raise RuntimeError(f"{fail_message}: {result}")
+
+    def close(self) -> None:
+        """Close the MAD-NG interface."""
+        if self.mad is not None:
+            logger.debug("Closing MAD interface")
+            self.mad.close()
+
+    def match_tunes(
+        self,
+        target_qx: float,
+        target_qy: float,
+        qx_knob: str | None = None,
+        qy_knob: str | None = None,
+        deltap: float = 0.0,
+    ) -> dict[str, float]:
+        """Match tunes using tune variables provided by the accelerator.
+
+        Args:
+            target_qx: Target horizontal tune
+            target_qy: Target vertical tune
+            qx_knob: MAD variable name for horizontal tune knob (optional if accelerator provides get_tune_variables)
+            qy_knob: MAD variable name for vertical tune knob (optional if accelerator provides get_tune_variables)
+            deltap: Relative momentum deviation for tune matching (default: 0.0)
+        """
+        if qx_knob is None or qy_knob is None:
+            qx_knob, qy_knob = self.accelerator.tune_variables
+
+        qx_int, qy_int = self.accelerator.tune_integers
+        self.mad["result"] = self.mad.match(
+            command=rf"\ -> twiss{{sequence=loaded_sequence, deltap={deltap:.16e}}}",
+            variables=[
+                {"var": f"'MADX.{qx_knob}'", "name": f"'{qx_knob}'"},
+                {"var": f"'MADX.{qy_knob}'", "name": f"'{qy_knob}'"},
+            ],
+            equalities=[
+                {"expr": f"\\t -> t.q1-({qx_int}+{target_qx})", "name": "'q1'"},
+                {"expr": f"\\t -> t.q2-({qy_int}+{target_qy})", "name": "'q2'"},
+            ],
+            objective={"fmin": 1e-8},
+            info=2,
+        )
+        return {
+            qx_knob: self.mad[f"MADX['{qx_knob}']"],
+            qy_knob: self.mad[f"MADX['{qy_knob}']"],
+        }
+
+    def _check_mad_response(self, expected: str, error_msg: str) -> None:
+        """Check that the response from MAD-NG matches the expected value."""
+        try:
+            if (result := self.mad.recv()) != expected:
+                raise RuntimeError(f"Unexpected response from MAD-NG: {result}. {error_msg}")
+        except Exception as exc:
+            raise RuntimeError(error_msg) from exc
+
+    def perform_orbit_correction(
+        self,
+        machine_deltap: float,
+        target_qx: float,
+        target_qy: float,
+        corrector_file: Path | None,
+        twiss_name: str = "zero_twiss",
+    ) -> dict[str, float]:
+        """Perform orbit correction followed by off-momentum tune rematching."""
+        qx_knob, qy_knob = self.accelerator.tune_variables
+        qx_int, qy_int = self.accelerator.tune_integers
+        self.mad["machine_deltap"] = machine_deltap
+        self.mad["correct_file"] = str(corrector_file.absolute()) if corrector_file else None
+
+        self.mad.send(rf"""
+local correct, option in MAD
+
+io.write("*** orbit correction using off momentum twiss\n")
+local tws_offmom = twiss {{ sequence=loaded_sequence, deltap=machine_deltap }}
+
+local fmt = option.numfmt ; option.numfmt = "% -.16e"
+local tbl = correct {{ sequence=loaded_sequence, model=tws_offmom, target={twiss_name}, method="svd", info=1, plane="x" }}
+if correct_file then
+    tbl:write(correct_file)
+end
+option.numfmt = fmt
+
+io.write("*** rematching tunes for off-momentum twiss\n")
+match {{
+  command := twiss {{sequence=loaded_sequence, observe=0, deltap=machine_deltap}},
+  variables = {{ rtol=1e-4,
+    {{ var = 'MADX.{qx_knob}', name='{qx_knob}' }},
+    {{ var = 'MADX.{qy_knob}', name='{qy_knob}' }},
+  }},
+  equalities = {{ tol = 1e-6,
+    {{ expr = \t -> t.q1-{qx_int + target_qx:.16e}, name='q1' }},
+    {{ expr = \t -> t.q2-{qy_int + target_qy:.16e}, name='q2' }},
+  }},
+  objective = {{fmin = 1e-8}},
+  info=2
+}}
+
+{self.py_name}:send("Complete")
+        """)
+        self._check_mad_response(
+            "Complete", "Error during MAD-NG orbit correction and tune matching"
+        )
+        return {
+            qx_knob: self.mad[f"MADX['{qx_knob}']"],
+            qy_knob: self.mad[f"MADX['{qy_knob}']"],
+        }
+
+    def install_ac_dipole(
+        self,
+        nat_tunes: tuple[float, float],
+        drv_tunes: tuple[float, float],
+    ) -> None:
+        """
+        Install AC dipole kickers at the location given by the accelerator's AC dipole marker, with specified natural and driven tunes.
+
+        The AC dipole consists of horizontal and vertical kicker elements that
+        drive the beam at specified tunes. The beta functions at the marker
+        location are automatically retrieved from the twiss table.
+
+        Args:
+            marker_name: Name of marker where AC dipole will be installed
+            nat_tunes: Natural tunes (qx, qy)
+            drv_tunes: Driven tunes (qx_drv, qy_drv)
+            offset: Offset from marker location (default: 0.0)
+        """
+        install_point, offset = self.accelerator.ac_dipole_location
+        logger.debug(
+            f"Installing AC dipole at {install_point} with natural tunes {nat_tunes} "
+            f"and driven tunes {drv_tunes}"
+        )
+
+        # Get beta functions at AC marker location
+        self.mad.send(f"""
+local tws = twiss{{sequence=loaded_sequence}}
+local betx = tws['{install_point}'].beta11
+local bety = tws['{install_point}'].beta22
+{self.py_name}:send({{betx, bety}}, true)
+""")
+        betx, bety = self.mad.recv()
+
+        if betx is None or bety is None:
+            raise ValueError(
+                f"Could not retrieve beta functions at marker '{install_point}'"
+            )
+
+        # Install AC kickers
+        self.mad.send(f"""
+local hackicker, vackicker in MAD.element
+loaded_sequence:install{{
+    hackicker "hackicker" {{
+        at = {offset},
+        from = "{install_point}",
+        nat_q = {nat_tunes[0]:.15e},
+        drv_q = {drv_tunes[0]:.15e},
+        ac_bet = {betx:.15e},
+    }},
+    vackicker "vackicker" {{
+        at = {offset},
+        from = "{install_point}",
+        nat_q = {nat_tunes[1]:.15e},
+        drv_q = {drv_tunes[1]:.15e},
+        ac_bet = {bety:.15e},
+    }}
+}}
+""")
+
+        logger.debug(
+            f"AC dipole installed: betx={betx:.6f}, bety={bety:.6f} at {install_point} with offset {offset}"
+        )
+
+    def __enter__(self) -> AcceleratorMadInterface:
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit context manager and close MAD interface."""
+        self.close()
+
+
+@deprecated.deprecated(
+    reason="Use AcceleratorMadInterface directly instead of CoreMadInterface alias",
+    version="0.2.0",
+)
+class CoreMadInterface(AcceleratorMadInterface):
+    """Backward-compatible alias for AcceleratorMadInterface."""
+
+    pass
+
+
+@deprecated.deprecated(
+    reason="Use AcceleratorMadInterface directly instead of AcDipoleMadInterface alias",
+    version="0.2.0",
+)
+class AcDipoleMadInterface(AcceleratorMadInterface):
+    """Backward-compatible alias for AcceleratorMadInterface with AC dipole methods."""
+
+    pass
+
+
+class AcceleratorErrorsMadInterface(AcceleratorMadInterface):
+    """MAD interface variant that applies accelerator-specific startup errors."""
+
+    def __init__(self, accelerator: Accelerator, **mad_kwargs):
+        super().__init__(accelerator=accelerator, **mad_kwargs)
+        self.accelerator.apply_accelerator_specific_errors(self)

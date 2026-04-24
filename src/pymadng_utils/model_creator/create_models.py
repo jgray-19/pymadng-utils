@@ -15,10 +15,40 @@ import pathlib
 
 from omc3.model_creator import create_instance_and_model
 
-from .madng_utils import update_model_with_madng
-from .make_sequence import make_lhc_sequence
+from pymadng_utils.accelerators import LHC
+from pymadng_utils.madx.make_sequence import make_madx_sequence
+from pymadng_utils.model_creator.madng_utils import update_model_with_madng
 
 LOGGER = logging.getLogger(__name__)
+
+
+def create_lhc_models(
+    beams: list[int],
+    data_dir: pathlib.Path,
+    year: str,
+    *,
+    nat_tunes: list[float],
+    optics_label: str,
+    fetch: str = "afs",
+    path: str | None = None,
+    drv_tunes: list[float] | None = None,
+    energy: float = 6800.0,
+    modifiers: str | list[str] | None = None,
+) -> None:
+    """Create multiple LHC models with a shared configuration."""
+    for beam in beams:
+        model_dir = data_dir / f"model_b{beam}__t{nat_tunes[0]}_{nat_tunes[1]}_{optics_label}"
+        create_lhc_model(
+            beam=beam,
+            output_dir=model_dir,
+            year=year,
+            fetch=fetch,
+            path=path,
+            nat_tunes=nat_tunes,
+            drv_tunes=drv_tunes,
+            energy=energy,
+            modifiers=modifiers,
+        )
 
 def create_lhc_model(
     beam: int,
@@ -71,6 +101,12 @@ def create_lhc_model(
     if isinstance(modifiers, str):
         modifiers = [modifiers]
 
+    accelerator = LHC(
+        beam=beam,
+        sequence_file=output_dir / f"lhcb{beam}_saved.seq",
+        pc=energy,
+    )
+
     LOGGER.info(f"\n{'=' * 70}")
     LOGGER.info(f"Creating LHC Model for Beam {beam}")
     LOGGER.info(f"{'=' * 70}")
@@ -107,17 +143,12 @@ def create_lhc_model(
 
     # Step 2: Generate MAD-X sequences
     LOGGER.info("Step 2: Generating MAD-X sequences...")
-    make_lhc_sequence(beam, output_dir, energy, beam4=(beam == 2))
+    make_madx_sequence(output_dir, beam4=(beam == 2))
     LOGGER.info("✓ MAD-X sequences generated\n")
 
     # Step 3: Update with MAD-NG
     LOGGER.info("Step 3: Updating model with MAD-NG...")
-    update_model_with_madng(
-        beam,
-        output_dir,
-        tunes=nat_tunes,
-        drv_tunes=drv_tunes,
-    )
+    update_model_with_madng(accelerator, output_dir, tunes=nat_tunes, drv_tunes=drv_tunes)
     LOGGER.info("✓ Model update complete\n")
 
     LOGGER.info(f"{'=' * 70}")
@@ -139,13 +170,13 @@ def main() -> None:
     print("LHC Model Creation Script")
     print("=" * 70 + "\n")
 
-    # Create Beam 1 model
-    model_dir_b1 = data_dir / f"model_b1__t{nat_tunes[0]}_{nat_tunes[1]}_{optics_label}"
-    create_lhc_model(beam=1, output_dir=model_dir_b1, year="2025")
-
-    # Create Beam 2 model
-    model_dir_b2 = data_dir / f"model_b2__t{nat_tunes[0]}_{nat_tunes[1]}_{optics_label}"
-    create_lhc_model(beam=2, output_dir=model_dir_b2, year="2025")
+    create_lhc_models(
+        beams=[1, 2],
+        data_dir=data_dir,
+        year="2025",
+        nat_tunes=nat_tunes,
+        optics_label=optics_label,
+    )
     print("\n" + "=" * 70)
     print("All models created successfully!")
     print("=" * 70 + "\n")

@@ -1,73 +1,421 @@
+"""MAD-X utility functions for model sequence creation."""
+
 from __future__ import annotations
 
 import logging
 import re
+import shutil
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import tfs
 from cpymad.madx import Madx
+from omc3.model.accelerators.lhc import Lhc
+from omc3.model.accelerators.psbooster import Psbooster
+from omc3.model.accelerators.sps import Sps
+from omc3.model.constants import JOB_MODEL_MADX_NOMINAL
+from omc3.model.model_creators.manager import CreatorType, get_model_creator_class
+
+from pymadng_utils.madx.constants import (
+    _DEFINE_NOMINAL_BEAMS_RE,
+    _LHC_SEQUENCE_TOKEN_RE,
+    _LHC_USE_SEQUENCE_RE,
+    _LHC_YEAR_RE,
+    _POST_OPTICS_INSERT_MARKERS,
+    _PSB_MATCH_END_RE,
+    _PSB_SEQUENCE_TOKEN_RE,
+    _PSB_USE_SEQUENCE_RE,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-    from pathlib import Path
+    from collections.abc import Sequence
+
+    from omc3.model.model_creators.abstract_model_creator import ModelCreator
 
 LOGGER = logging.getLogger(__name__)
 
-MADX_FILENAME = "job.create_model_nominal.madx"
 
-def make_madx_sequence(
+def _adapt_script_to_beam4(base_script: str, beam: int, energy: float) -> str:
+    """Adapt creator base script for beam4 tracking (beam 2 only)."""
+    if beam != 2:
+        raise ValueError("beam4 script adaptation is only valid for beam 2.")
+
+    script = base_script.replace("lhc.seq", "lhcb4.seq")
+    beam4_cmd = f"beam, sequence=LHCB2, particle=proton, energy={energy}, bv=1;"
+
+    if not _DEFINE_NOMINAL_BEAMS_RE.search(script):
+        raise ValueError("Could not find define_nominal_beams call to adapt for beam4.")
+
+    return _DEFINE_NOMINAL_BEAMS_RE.sub(beam4_cmd, script, count=1)
+
+
+def _detect_accelerator_from_model_dir(model_dir: Path) -> str:
+    """Infer accelerator family from model folder contents."""
+    if (model_dir / Lhc.LOCAL_REPO_NAME).exists():
+        return "lhc"
+    if (model_dir / Sps.LOCAL_REPO_NAME).exists():
+        return "sps"
+    if (model_dir / Psbooster.LOCAL_REPO_NAME).exists():
+        return "psb"
+
+    job_file = model_dir / JOB_MODEL_MADX_NOMINAL
+    if job_file.exists():
+        job_text = job_file.read_text(errors="ignore").lower()
+        if (
+            Lhc.LOCAL_REPO_NAME in job_text
+            or "lhcb1" in job_text
+            or "lhcb2" in job_text
+        ):
+            return "lhc"
+        if (
+            Sps.LOCAL_REPO_NAME in job_text
+            or "sps.seq" in job_text
+            or "sequence=sps" in job_text
+        ):
+            return "sps"
+        if (
+            Psbooster.LOCAL_REPO_NAME in job_text
+            or "psb.seq" in job_text
+            or "sequence=psb" in job_text
+        ):
+            return "psb"
+
+    raise ValueError(
+        f"Could not infer accelerator type from model directory: {model_dir}. "
+        "Expected LHC, SPS, or PSB model layout."
+    )
+
+
+def _detect_lhc_beam_from_model_dir(model_dir: Path) -> int:
+    """Infer LHC beam number from model folder contents."""
+    job_file = model_dir / JOB_MODEL_MADX_NOMINAL
+    if job_file.exists():
+        text = job_file.read_text(errors="ignore")
+        use_matches = {
+            int(match.group(1)) for match in _LHC_USE_SEQUENCE_RE.finditer(text)
+        }
+        if len(use_matches) == 1:
+            beam = use_matches.pop()
+            LOGGER.info(
+                "Inferred LHC beam %d from use statement in MAD-X nominal job file: %s",
+                beam,
+                job_file,
+            )
+            return beam
+
+        token_matches = {
+            int(match.group(1)) for match in _LHC_SEQUENCE_TOKEN_RE.finditer(text)
+        }
+        if len(token_matches) == 1:
+            beam = token_matches.pop()
+            LOGGER.info(
+                "Inferred LHC beam %d from sequence tokens in MAD-X nominal job file: %s",
+                beam,
+                job_file,
+            )
+            return beam
+
+    name = model_dir.name.lower()
+    has_b1 = "b1" in name
+    has_b2 = "b2" in name
+    if has_b1 and not has_b2:
+        LOGGER.info("Inferred LHC beam 1 from model directory name: %s", model_dir)
+        return 1
+    if has_b2 and not has_b1:
+        LOGGER.info("Inferred LHC beam 2 from model directory name: %s", model_dir)
+        return 2
+
+    raise ValueError(
+        f"Could not infer LHC beam from model directory: {model_dir}. "
+        "Provide a model directory with an unambiguous beam."
+    )
+
+
+def _detect_lhc_year_from_model_dir(model_dir: Path) -> str:
+    """Infer LHC optics year from the nominal omc3 MAD-X header."""
+    job_file = model_dir / JOB_MODEL_MADX_NOMINAL
+    if job_file.exists():
+        match = _LHC_YEAR_RE.search(job_file.read_text(errors="ignore"))
+        if match is not None:
+            return match.group("year")
+
+    raise ValueError(
+        f"Could not infer LHC year from model directory: {model_dir}. "
+        "Expected the omc3 nominal header comment '! LHC year ...'."
+    )
+
+
+def _detect_psb_ring_from_model_dir(model_dir: Path) -> int:
+    """Infer PSB ring number from job file or directory name."""
+    job_file = model_dir / JOB_MODEL_MADX_NOMINAL
+    if job_file.exists():
+        text = job_file.read_text(errors="ignore")
+        use_matches = {
+            int(match.group(1)) for match in _PSB_USE_SEQUENCE_RE.finditer(text)
+        }
+        if len(use_matches) == 1:
+            return use_matches.pop()
+
+        token_matches = {
+            int(match.group(1)) for match in _PSB_SEQUENCE_TOKEN_RE.finditer(text)
+        }
+        if len(token_matches) == 1:
+            return token_matches.pop()
+
+    name = model_dir.name.lower()
+    for ring in range(1, 5):
+        if f"ring{ring}" in name or f"psb{ring}" in name:
+            return ring
+
+    raise ValueError(
+        f"Could not infer PSB ring from model directory: {model_dir}. "
+        "Expected an unambiguous `use, sequence=psbN;` statement."
+    )
+
+
+def _extract_psb_script(job_text: str) -> str:
+    """Return the portion of the PSB job file up to and including tune matching."""
+    match = _PSB_MATCH_END_RE.search(job_text)
+    if match is None:
+        raise ValueError("Could not find `ENDMATCH;` in PSB nominal MAD-X job file.")
+    return job_text[: match.end()] + "\n"
+
+
+def _has_acd(model_dir: Path) -> bool:
+    """Determine whether the PSB model should retain AC-dipole elements."""
+    return (model_dir / "twiss_ac.dat").exists()
+
+
+def _rewrite_psb_ac_maps_to_acdipoles(
+    seq_path: Path, model_dir: Path, job_text: str
+) -> None:
+    """Adjust PSB AC-map content in the saved sequence.
+
+    For ACD-off inputs, remove the thin map definitions and placements entirely.
+    For ACD-on inputs, replace the MAD-X matrix elements with MAD-NG-native
+    ``hackicker``/``vackicker`` elements so the saved sequence can be loaded by
+    :class:`AbaMadInterface` while preserving the driven tunes.
+    """
+    seq_text = seq_path.read_text()
+
+    # Natural tunes
+    twiss = tfs.read(model_dir / "twiss.dat", index="NAME")
+    qx = twiss.headers["Q1"]
+    qy = twiss.headers["Q2"]
+
+    if _has_acd(model_dir):
+        twiss_ac = tfs.read(model_dir / "twiss_ac.dat", index="NAME")
+        qxd = twiss_ac.headers["Q1"]
+        qyd = twiss_ac.headers["Q2"]
+    else:
+        qxd = qx
+        qyd = qy
+
+    twiss_elements = tfs.read(model_dir / "twiss_elements.dat", index="NAME")
+    betxac = twiss_elements.loc["HACMAP", "BETX"]
+    betyac = twiss_elements.loc["VACMAP", "BETY"]
+
+    seq_text = re.sub(
+        r"(?im)^\s*hacmap21\s*=\s*[^;]+;\s*$",
+        "",
+        seq_text,
+    )
+    seq_text = re.sub(
+        r"(?im)^\s*vacmap43\s*=\s*[^;]+;\s*$",
+        "",
+        seq_text,
+    )
+    # If nat_q == drv_q, the kick becomes zero, therefore the element will just be ignored.
+    seq_text = re.sub(
+        r"(?im)^\s*hacmap\s*:\s*matrix\s*,\s*l:?=\s*[^;]+;\s*$",
+        (
+            "hacmap: hackicker,"
+            f"l:={0.0:.16e},"
+            f"nat_q:={qx:.16e},"
+            f"drv_q:={qxd:.16e},"
+            f"ac_bet:={betxac:.16e};"
+        ),
+        seq_text,
+    )
+    seq_text = re.sub(
+        r"(?im)^\s*vacmap\s*:\s*matrix\s*,\s*l:?=\s*[^;]+;\s*$",
+        (
+            "vacmap: vackicker,"
+            f"l:={0.0:.16e},"
+            f"nat_q:={qy:.16e},"
+            f"drv_q:={qyd:.16e},"
+            f"ac_bet:={betyac:.16e};"
+        ),
+        seq_text,
+    )
+    seq_path.write_text(seq_text)
+
+
+def _inject_post_optics_calls(madx_script: str, madx_files: Sequence[str]) -> str:
+    """Insert additional MAD-X files after the optics modifiers section."""
+    if not madx_files:
+        return madx_script
+
+    extra_calls = "\n! ----- Additional post-optics modifiers -----\n" + "".join(
+        f"call, file = '{madx_file}';\n" for madx_file in madx_files
+    )
+
+    for marker in _POST_OPTICS_INSERT_MARKERS:
+        marker_index = madx_script.find(marker)
+        if marker_index != -1:
+            return madx_script[:marker_index] + extra_calls + madx_script[marker_index:]
+
+    return madx_script + extra_calls
+
+
+def _make_psb_sequence(
     model_dir: Path,
-    sequence_madx_name: str,
-    sequence_save_path: Path,
-    madx_filename: str | None = None,
-    customisation_command: Callable[[str], str] | None = None, # Optional function that takes a string and returns a modified string
-) -> Path:
-    """
-    Generate and save the MAD-X sequence file from an OMC3-generated model and MAD-X job file.
+    *,
+    seq_outdir: Path,
+) -> tuple[Path, int]:
+    """Generate a matched PSB sequence from an existing nominal MAD-X job file."""
+    job_file = model_dir / JOB_MODEL_MADX_NOMINAL
+    if not job_file.exists():
+        raise FileNotFoundError(
+            f"Expected PSB nominal MAD-X job file not found: {job_file}"
+        )
 
-    Args:
-        model_dir: Directory containing the OMC3-generated model and MAD-X job file.
-        sequence_save_path: Path where the generated sequence file should be saved.
-        madx_filename: Optional name of the MAD-X job file. If None, uses default 'madx_job.madx'.
-        customisation_command: Optional function that takes a string and returns a modified string.
-            If provided, this function will be applied to each line of the MAD-X job file before sending it to MAD-X.
-            This allows for dynamic modifications of the MAD-X commands based on the model or other parameters.
-
-    Returns:
-        Path to the generated MAD-X sequence file.
-
-    Raises:
-        FileNotFoundError: If the MAD-X job file is not found in the model directory.
-    """
-
-    filename = madx_filename or MADX_FILENAME
-    madx_file = model_dir / filename
-
-    if not madx_file.exists():
-        raise FileNotFoundError(f"MAD-X file not found: {madx_file}")
-
-    with madx_file.open("r") as f:
-        lines = f.readlines()
-
+    ring = _detect_psb_ring_from_model_dir(model_dir)
+    job_text = job_file.read_text()
+    # The script takes everything up to the end of the match block.
+    madx_script = _extract_psb_script(job_text)
+    save_script = (
+        "set, format='-16.16e';\n"
+        f"save, sequence=psb{ring}, file='saved_madx.seq', noexpr=false;\n"
+    )
 
     with Madx(stdout=False) as madx:
         madx.chdir(str(model_dir))
+        madx.input(madx_script)
+        madx.chdir(str(seq_outdir))
+        madx.input(save_script)
 
-        for line in lines:
-            # Apply customisation command if provided
-            if customisation_command:
-                line = customisation_command(line)
+    saved_seq = seq_outdir / "saved_madx.seq"
+    if not saved_seq.exists():
+        raise FileNotFoundError(
+            f"Expected saved sequence file not produced by MAD-X: {saved_seq}"
+        )
 
-            # Check if twiss[_a-z]*\.dat is in the line, then we stop processing and save the sequence
-            if re.search(r"'twiss[_a-z]*\.dat'", line):
-                # Stop processing and save the sequence
-                save_cmd = f"""
-set, format="-16.16e";
-save, sequence={sequence_madx_name}, file="{sequence_save_path.absolute()}", noexpr=false;
-                """
-                madx.input(save_cmd)
-                print(save_cmd)
-                break
+    seq_path = seq_outdir / f"psb{ring}_saved.seq"
+    if saved_seq.resolve() != seq_path.resolve():
+        shutil.copy2(saved_seq, seq_path)
+        saved_seq.unlink(missing_ok=True)
 
-            madx.input(line)
-    LOGGER.info(f"Saved MAD-X sequence to {sequence_save_path}")
-    return sequence_save_path
+    _rewrite_psb_ac_maps_to_acdipoles(seq_path, model_dir, job_text)
+    return seq_path, ring
+
+
+def _load_nominal_creator_from_model_dir(
+    model_dir: Path,
+) -> tuple[ModelCreator, str, int | None]:
+    """Load OMC3 nominal creator from an existing LHC or SPS model directory."""
+    accelerator = _detect_accelerator_from_model_dir(model_dir)
+    if accelerator == "lhc":
+        beam = _detect_lhc_beam_from_model_dir(model_dir)
+        year = _detect_lhc_year_from_model_dir(model_dir)
+        accel = Lhc(model_dir=model_dir, beam=beam, year=year)
+    else:
+        beam = None
+        accel = Sps(model_dir=model_dir)
+
+    creator_class = get_model_creator_class(accel, CreatorType.NOMINAL)  # ty:ignore[invalid-argument-type]
+    creator = creator_class(accel)
+    # creator.prepare_run()
+    return creator, accelerator, beam
+
+
+def make_madx_sequence(
+    model_dir: Path | str,
+    *,
+    seq_outdir: Path | None = None,
+    beam4: bool = False,
+    post_optics_madx_files: Sequence[Path | str] | None = None,
+) -> Path:
+    """Generate and save a matched MAD-X sequence file from a model folder.
+
+    - Supports LHC, SPS, and PSB model directories
+    - Uses the existing PSB nominal job file and stops after tune matching
+    - Optionally injects post-optics modifiers for creator-backed accelerators
+    - Saves the resulting sequence to ``seq_outdir`` or the model directory
+    """
+
+    model_dir = Path(model_dir)
+    if not model_dir.exists():
+        raise FileNotFoundError(f"Model directory not found: {model_dir}")
+
+    accelerator = _detect_accelerator_from_model_dir(model_dir)
+    outdir = Path(seq_outdir) if seq_outdir is not None else model_dir
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    if accelerator == "psb":
+        if beam4:
+            raise ValueError("beam4 sequence adaptation is not supported for PSB.")
+        if post_optics_madx_files:
+            raise ValueError(
+                "Additional post-optics MAD-X files are not supported for PSB sequence export."
+            )
+
+        seq_path, ring = _make_psb_sequence(model_dir, seq_outdir=outdir)
+        LOGGER.info(
+            "Saved MAD-X sequence for accelerator PSB ring %d to %s", ring, seq_path
+        )
+        return seq_path
+
+    creator, accelerator, beam = _load_nominal_creator_from_model_dir(model_dir)
+
+    madx_script = creator.get_base_madx_script()
+    if beam4:
+        if accelerator != "lhc" or beam != 2:
+            raise ValueError(
+                "beam4 sequence adaptation is only supported for LHC beam 2."
+            )
+        creator_energy = creator.accel.energy
+        if creator_energy is None:
+            raise ValueError(
+                "Could not determine beam energy from model creator accelerator."
+            )
+
+        madx_script = _adapt_script_to_beam4(madx_script, beam, float(creator_energy))
+
+    if post_optics_madx_files:
+        madx_script = _inject_post_optics_calls(
+            madx_script,
+            [
+                f"{creator.resolve_path_for_madx(Path(madx_file).resolve())}"
+                for madx_file in post_optics_madx_files
+            ],
+        )
+
+    with Madx(stdout=False) as madx:
+        madx.chdir(str(model_dir))
+        madx.input(madx_script)
+
+        # Always move to outdir, in case you don't have write permissions in the original model_dir
+        madx.chdir(str(outdir))
+        madx.input(creator.get_save_sequence_script())
+
+    saved_seq = outdir / creator.save_sequence_filename
+    if not saved_seq.exists():
+        raise FileNotFoundError(
+            f"Expected saved sequence file not produced by creator: {saved_seq}"
+        )
+
+    desired_seq_name = f"{creator.sequence_name.lower()}_saved.seq"
+    seq_path = outdir / desired_seq_name
+
+    if saved_seq.resolve() != seq_path.resolve():
+        shutil.copy2(saved_seq, seq_path)
+        saved_seq.unlink(missing_ok=True)
+
+    LOGGER.info(
+        "Saved MAD-X sequence for accelerator %s%s to %s",
+        accelerator.upper(),
+        f" beam {beam}" if accelerator == "lhc" else "",
+        seq_path,
+    )
+    return seq_path

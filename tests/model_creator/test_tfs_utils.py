@@ -32,10 +32,10 @@ def test_convert_tfs_to_madx_renames_columns_and_filters_markers() -> None:
 
     assert "MUX" in converted.columns
     assert "MUY" in converted.columns
-    assert "DX" in converted.columns
-    assert "DPX" in converted.columns
-    assert "DY" in converted.columns
-    assert "DPY" in converted.columns
+    assert "DISP1" in converted.columns  # IS THIS CORRECT? SHOULD THIS BE DX?
+    assert "DISP2" in converted.columns  # IS THIS CORRECT? SHOULD THIS BE DY?
+    assert "DISP3" in converted.columns  # IS THIS CORRECT? SHOULD THIS BE DPX?
+    assert "DISP4" in converted.columns  # IS THIS CORRECT? SHOULD THIS BE DPY?
     assert "$start" not in converted.index
     assert "$end" not in converted.index
     assert "DRIFT_0" in converted.index

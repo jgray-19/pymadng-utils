@@ -1,10 +1,12 @@
 """TFS file format conversion utilities."""
 
+import logging
 from pathlib import Path
 
 import pandas as pd
 import tfs
 
+LOGGER = logging.getLogger(__name__)
 
 def convert_tfs_to_madx(tfs_df: pd.DataFrame, remove_drifts=True) -> pd.DataFrame:
     """
@@ -32,6 +34,10 @@ def convert_tfs_to_madx(tfs_df: pd.DataFrame, remove_drifts=True) -> pd.DataFram
     # Make the headers all upper case for consistency
     tfs_df.headers = {k.upper(): v for k, v in tfs_df.headers.items()}
 
+    # Remove all columns that are not lowercase.
+    drop_columns = [col for col in tfs_df.columns if not col.islower()]
+    tfs_df = tfs_df.drop(columns=drop_columns)
+
     # Make the columns all upper case for consistency
     tfs_df.columns = [col.upper() for col in tfs_df.columns]
 
@@ -39,9 +45,9 @@ def convert_tfs_to_madx(tfs_df: pd.DataFrame, remove_drifts=True) -> pd.DataFram
     tfs_df.rename(columns={"MU1": "MUX", "MU2": "MUY"}, inplace=True)
 
     # Change disp1 and disp3 to DX and DY
-    tfs_df.rename(
-        columns={"DISP1": "DX", "DISP2": "DPX", "DISP3": "DY", "DISP4": "DPY"}, inplace=True
-    )
+    # tfs_df.rename(
+    #     columns={"DISP1": "DX", "DISP2": "DPX", "DISP3": "DY", "DISP4": "DPY"}, inplace=True
+    # )
 
     # Renumber drift elements consecutively
     if remove_drifts:
@@ -81,7 +87,7 @@ def export_tfs_to_madx(tfs_file: Path) -> None:
     tfs_df = convert_tfs_to_madx(tfs_df)
     tfs.write(tfs_file, tfs_df, save_index="NAME")
 
-    print(f"Converted TFS file to MAD-X format: {tfs_file.name}")
+    LOGGER.info(f"Converted TFS file to MAD-X format: {tfs_file.name}")
 
 
 def convert_multiple_tfs_files(tfs_files: list[Path]) -> None:

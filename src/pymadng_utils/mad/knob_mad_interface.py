@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from pymadng_utils.io.utils import read_knobs
 
-from .core_mad_interface import CoreMadInterface
+from .accelerator_mad_interface import AcceleratorMadInterface
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class KnobMadInterface(CoreMadInterface):
+class KnobMadInterface(AcceleratorMadInterface):
     """Base class for accelerator-specific MAD-NG interfaces with common setup methods."""
 
     def apply_corrector_strengths(self, corrector_table: pd.DataFrame) -> None:
@@ -54,7 +54,7 @@ class KnobMadInterface(CoreMadInterface):
 
     def observe_bpms(self, bpm_pattern: str, bad_bpms: list[str] | None = None) -> None:
         """Set up the MAD-NG session to observe BPMs."""
-        self.observe_elements(bpm_pattern)
+        self.observe(bpm_pattern)
         logger.debug(f"Set up observation for BPMs matching pattern: {bpm_pattern}")
         if bad_bpms:
             self.unobserve_elements(bad_bpms)

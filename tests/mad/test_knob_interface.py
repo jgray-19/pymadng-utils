@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 import pandas as pd
 import pytest
 
+from pymadng_utils.accelerators import LHC
 from pymadng_utils.mad.knob_mad_interface import KnobMadInterface
 
 if TYPE_CHECKING:
@@ -21,9 +22,9 @@ if TYPE_CHECKING:
 @pytest.fixture(scope="function")
 def knob_interface_with_beam(seq_b1: Path):
     """Fixture that returns a KnobMadInterface with sequence loaded and beam set up."""
-    interface = KnobMadInterface()
-    interface.load_sequence(seq_b1, "lhcb1")
-    interface.setup_beam(particle="proton", beam_energy=6800.0)
+    interface = KnobMadInterface(
+        accelerator=LHC(beam=1, sequence_file=seq_b1, pc=6800.0)
+    )
     yield interface
     # Suppress only expected cleanup-related errors to avoid hiding real bugs.
     with contextlib.suppress(AttributeError, RuntimeError):
