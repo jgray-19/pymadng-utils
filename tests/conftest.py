@@ -38,7 +38,7 @@ def seq_b1(data_dir: Path) -> Path:
 @pytest.fixture(scope="session")
 def lhc_b1(seq_b1: Path) -> LHC:
     """Reusable LHC accelerator descriptor for beam 1 tests."""
-    return LHC(beam=1, sequence_file=seq_b1, pc=6800.0)
+    return LHC(beam=1, sequence_file=seq_b1, kinetic_energy=6800.0)
 
 
 @pytest.fixture(scope="session")

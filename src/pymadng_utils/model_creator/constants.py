@@ -34,7 +34,8 @@ MODEL_HEADER = [
     "dq3",
 ]
 
-MODEL_COLUMNS = [
+
+MADX_MODEL_COLUMNS = [
     "name",
     "kind",
     "s",
@@ -42,6 +43,30 @@ MODEL_COLUMNS = [
     "alfx",
     "bety",
     "alfy",
+    "mu1",
+    "mu2",
+    "x",
+    "px",
+    "y",
+    "py",
+    "dx",
+    "dpx",
+    "dy",
+    "dpy",
+    "r11",
+    "r12",
+    "r21",
+    "r22",
+]
+
+MADNG_MODEL_COLUMNS = [
+    "name",
+    "kind",
+    "s",
+    "beta11",
+    "alfa11",
+    "beta22",
+    "alfa22",
     "mu1",
     "mu2",
     "x",

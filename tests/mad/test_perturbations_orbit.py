@@ -14,7 +14,7 @@ from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
 def lhc_interface(seq_b1):
     """Return a fresh MAD interface with LHC perturbation metadata enabled."""
     interface = AcceleratorMadInterface(
-        accelerator=LHC(beam=1, sequence_file=seq_b1, pc=6800.0)
+        accelerator=LHC(beam=1, sequence_file=seq_b1, kinetic_energy=6800.0)
     )
     yield interface
     interface.close()

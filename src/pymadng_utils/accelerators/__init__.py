@@ -7,7 +7,7 @@ from pymadng_utils.accelerators.base import (
 from pymadng_utils.accelerators.lhc import LHC
 from pymadng_utils.accelerators.psb import (
     PSB,
-    PSB_FLAT_BOTTOM_MOMENTUM_GEV,
+    PSB_FLAT_BOTTOM_GEV,
 )
 
 __all__ = [

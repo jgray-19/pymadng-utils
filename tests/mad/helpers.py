@@ -44,14 +44,14 @@ def check_sequence_loaded(
 def check_beam_setup(
     interface: AcceleratorMadInterface,
     particle: str = "proton",
-    pc: float | None = None,
+    kinetic_energy: float | None = None,
     charge: int = 1,
     spin: float = 0.5,
 ) -> None:
     """Check beam setup properties."""
     assert particle == interface.mad.loaded_sequence.beam.particle
-    if pc is not None:
-        assert pc == interface.mad.loaded_sequence.beam.pc
+    if kinetic_energy is not None:
+        assert kinetic_energy == interface.mad.loaded_sequence.beam.kinetic_energy
     assert charge == interface.mad.loaded_sequence.beam.charge
     assert spin == interface.mad.loaded_sequence.beam.spin
 

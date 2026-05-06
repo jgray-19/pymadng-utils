@@ -19,8 +19,8 @@ LOGGER = logging.getLogger(__name__)
 def update_model_with_madng(
     accelerator: Accelerator,
     model_dir: Path,
-    tunes: list[float] = [0.28, 0.31],
     *,
+    tunes: list[float] | None = None,
     drv_tunes: list[float] | None = None,
     convert_to_madx: bool = True,
 ) -> None:
@@ -51,7 +51,7 @@ def update_model_with_madng(
         tunes=tunes,
         drv_tunes=drv_tunes,
     ) as mad_interface:
-        mad_interface.compute_and_export_twiss_tables()
+        mad_interface.compute_and_export_twiss_tables(convert_to_madx)
 
     if convert_to_madx:
         LOGGER.info("Converting TFS files to MAD-X format...")

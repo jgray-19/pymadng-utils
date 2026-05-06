@@ -2,39 +2,48 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import re
+from pathlib import Path
 
 from pymadng_utils.accelerators.base import (
     Accelerator,
 )
 
-if TYPE_CHECKING:
-    from pathlib import Path
+PSB_FLAT_BOTTOM_GEV = 0.160
 
 
-PSB_FLAT_BOTTOM_MOMENTUM_GEV = 0.160
+def _infer_psb_ring_number(sequence_path: Path) -> int:
+    match = re.search(r"psb(\d+)", sequence_path.name, re.IGNORECASE)
+    if match is not None:
+        return int(match.group(1))
+    raise ValueError(
+        f"Could not infer PSB ring number from sequence file name: {sequence_path.name}"
+    )
 
 
 class PSB(Accelerator):
     """Proton Synchrotron Booster accelerator configuration."""
 
-    BPM_PATTERN_TEMPLATE = "^BR{ring}%.BPM"
+    BPM_PATTERN_TEMPLATE = "^BR{ring}%.BPM.*{ring}$"
+    SEXTUPOLE_PATTERN = r"^BR%d+%.XNO.*"
 
     def __init__(
         self,
-        ring: int,
         sequence_file: Path | str,
-        pc: float = PSB_FLAT_BOTTOM_MOMENTUM_GEV,
+        ring: int | None = None,
+        kinetic_energy: float = PSB_FLAT_BOTTOM_GEV,
         bpm_pattern: str | None = None,
         particle: str = "proton",
     ) -> None:
+        if ring is None:
+            ring = _infer_psb_ring_number(Path(sequence_file))
         if ring not in (1, 2, 3, 4):
             raise ValueError(f"PSB ring must be 1, 2, 3, or 4, got {ring}")
 
         self.ring = ring
         super().__init__(
             sequence_file=sequence_file,
-            pc=pc,
+            kinetic_energy=kinetic_energy,
             bpm_pattern=bpm_pattern or self.BPM_PATTERN_TEMPLATE.format(ring=ring),
             particle=particle,
         )

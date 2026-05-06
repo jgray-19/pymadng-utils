@@ -78,7 +78,7 @@ def test_create_lhc_models(beam, temp_model_dir, acc_models_path):
     # Test loading sequence and running twiss with MadCoreInterface
     sequence_file = model_dir / f"lhcb{beam}_saved.seq"
     mad = AcceleratorMadInterface(
-        accelerator=LHC(beam=beam, sequence_file=sequence_file, pc=6800.0)
+        accelerator=LHC(beam=beam, sequence_file=sequence_file, kinetic_energy=6800.0)
     )
 
     # Run twiss

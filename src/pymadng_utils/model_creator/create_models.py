@@ -104,7 +104,7 @@ def create_lhc_model(
     accelerator = LHC(
         beam=beam,
         sequence_file=output_dir / f"lhcb{beam}_saved.seq",
-        pc=energy,
+        kinetic_energy=energy,
     )
 
     LOGGER.info(f"\n{'=' * 70}")

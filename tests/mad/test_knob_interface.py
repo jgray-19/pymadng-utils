@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 def knob_interface_with_beam(seq_b1: Path):
     """Fixture that returns a KnobMadInterface with sequence loaded and beam set up."""
     interface = KnobMadInterface(
-        accelerator=LHC(beam=1, sequence_file=seq_b1, pc=6800.0)
+        accelerator=LHC(beam=1, sequence_file=seq_b1, kinetic_energy=6800.0)
     )
     yield interface
     # Suppress only expected cleanup-related errors to avoid hiding real bugs.

@@ -36,7 +36,7 @@ class MissingSequenceLHC(LHC):
 def loaded_ac_interface_with_beam(seq_b1: Path):
     """Fixture that returns an AC-capable interface with sequence loaded and beam set up."""
     interface = AcceleratorMadInterface(
-        accelerator=LHC(beam=1, sequence_file=seq_b1, pc=6800.0)
+        accelerator=LHC(beam=1, sequence_file=seq_b1, kinetic_energy=6800.0)
     )
     yield interface
     interface.close()
@@ -45,7 +45,7 @@ def loaded_ac_interface_with_beam(seq_b1: Path):
 def test_init(seq_b1: Path) -> None:
     """Test initialization of AcceleratorMadInterface."""
     interface = AcceleratorMadInterface(
-        accelerator=LHC(beam=1, sequence_file=seq_b1, pc=6800.0)
+        accelerator=LHC(beam=1, sequence_file=seq_b1, kinetic_energy=6800.0)
     )
     check_interface_basic_init(interface, "py")
     interface.mad.send("a = 2")
@@ -69,7 +69,9 @@ def test_load_sequence_unknown_sequence_raises(seq_b1: Path) -> None:
         match=r"Sequence 'does_not_exist' not found in MAD file",
     ):
         AcceleratorMadInterface(
-            accelerator=MissingSequenceLHC(beam=1, sequence_file=seq_b1, pc=6800.0)
+            accelerator=MissingSequenceLHC(
+                beam=1, sequence_file=seq_b1, kinetic_energy=6800.0
+            )
         )
 
 
@@ -83,13 +85,13 @@ def test_load_sequence_bad_file_raises(tmp_path: Path) -> None:
         match=r"Sequence 'lhcb1' not found in MAD file",
     ):
         AcceleratorMadInterface(
-            accelerator=LHC(beam=1, sequence_file=bad_sequence, pc=6800.0)
+            accelerator=LHC(beam=1, sequence_file=bad_sequence, kinetic_energy=6800.0)
         )
 
 
 def test_setup_beam(loaded_interface: AcceleratorMadInterface) -> None:
     """Test beam parameters from the accelerator descriptor are applied."""
-    check_beam_setup(loaded_interface, particle="proton", pc=6800.0)
+    check_beam_setup(loaded_interface, particle="proton", kinetic_energy=6800.0)
 
 
 @pytest.mark.parametrize(

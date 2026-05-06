@@ -3,8 +3,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+import tfs
+
 from pymadng_utils.model_creator.constants import (
-    MODEL_COLUMNS,
+    MADNG_MODEL_COLUMNS,
+    MADX_MODEL_COLUMNS,
     MODEL_HEADER,
     MODEL_STRENGTHS,
 )
@@ -28,12 +31,18 @@ class ModelCreatorMadInterface(AcceleratorMadInterface):
         self,
         accelerator: Accelerator,
         model_dir: Path,
-        tunes: list[float],
+        tunes: list[float] | None = None,
         drv_tunes: list[float] | None = None,
         **mad_kwargs,
     ):
         super().__init__(accelerator=accelerator, **mad_kwargs)
         self.model_dir = model_dir
+        if tunes is None:
+            # Just in case the twiss is madng based, it will be lowercase, not capitalised
+            twiss = tfs.read(model_dir / "twiss.dat")
+            headers = {key.lower(): value for key, value in twiss.headers.items()}
+            tunes = [headers["q1"]%1, headers["q2"]%1]
+
         self.tunes = tunes
         self.setup_sequence()
 
@@ -82,7 +91,7 @@ local tbl = twiss {{sequence=loaded_sequence}};
         LOGGER.info(f"{log_msg}: Q1={q1:.6f}, Q2={q2:.6f}")
         return q1, q2
 
-    def compute_and_export_twiss_tables(self) -> None:
+    def compute_and_export_twiss_tables(self, export_madx_names = True) -> None:
         """Compute twiss tables and export model files."""
         self.mad.send("""
 hnams = py:recv()
@@ -94,11 +103,12 @@ twiss_elements = twiss { sequence=loaded_sequence, coupling=true }
 twiss_elements:select(nil, \\ -> true)
 twiss_elements:deselect{pattern="drift"}
 """)
-        self.mad.send(MODEL_HEADER).send(MODEL_COLUMNS).send(MODEL_STRENGTHS)
+        model_columns = MADX_MODEL_COLUMNS if export_madx_names else MADNG_MODEL_COLUMNS
+        self.mad.send(MODEL_HEADER).send(model_columns).send(MODEL_STRENGTHS)
 
         self.add_strength_columns("twiss_elements")
 
-        self.observe("BPM")
+        self.observe()
         self.mad.send(
             "twiss_data = twiss {sequence=loaded_sequence, coupling=true, observe=1}"
         )

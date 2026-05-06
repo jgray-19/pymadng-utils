@@ -20,7 +20,7 @@ def model_file(seq_b1: Path, tmp_path: Path) -> Path:
 @pytest.fixture
 def model_interface(model_file: Path, tmp_path: Path):
     """Create a real model-creator interface using the test sequence."""
-    accel = LHC(beam=1, pc=6800.0, sequence_file=model_file)
+    accel = LHC(beam=1, kinetic_energy=6800.0, sequence_file=model_file)
     interface = ModelCreatorMadInterface(
         model_dir=tmp_path,
         accelerator=accel,
@@ -39,7 +39,7 @@ def test_model_creator_init_requires_existing_sequence(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="Sequence file not found"):
         ModelCreatorMadInterface(
             model_dir=tmp_path,
-            accelerator=LHC(beam=1, pc=6800.0, sequence_file=missing_file),
+            accelerator=LHC(beam=1, kinetic_energy=6800.0, sequence_file=missing_file),
             tunes=[0.28, 0.31],
         )
 
@@ -50,13 +50,13 @@ def test_model_creator_init_loads_sequence_and_beam(
     """Initialization should load the sequence, set the beam, and keep config values."""
     assert model_interface.model_dir == tmp_path
     assert model_interface.accelerator.sequence_file == model_file
-    assert model_interface.accelerator.pc == 6800.0
+    assert model_interface.accelerator.kinetic_energy == 6800.0
     assert model_interface.tunes == [0.28, 0.31]
     assert model_interface.accelerator.tune_variables == ("dqx_b1_op", "dqy_b1_op")
     assert model_interface.mad.SEQ_NAME == "lhcb1"
     assert model_interface.mad.loaded_sequence is not None
     assert model_interface.mad.loaded_sequence.beam.particle == "proton"
-    assert model_interface.mad.loaded_sequence.beam.pc == 6800.0
+    assert model_interface.mad.loaded_sequence.beam.kinetic_energy == 6800.0
 
 
 def test_get_current_tunes_reads_real_twiss(

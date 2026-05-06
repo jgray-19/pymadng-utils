@@ -20,12 +20,12 @@ class Accelerator(ABC):
     def __init__(
         self,
         sequence_file: Path | str,
-        pc: float,
+        kinetic_energy: float,
         bpm_pattern: str = "BPM",
         particle: str = "proton",
     ) -> None:
         self.sequence_file = Path(sequence_file)
-        self.pc = float(pc)
+        self.kinetic_energy = float(kinetic_energy)
         self.bpm_pattern = str(bpm_pattern)
         self.particle = str(particle)
 
@@ -49,18 +49,6 @@ class Accelerator(ABC):
     @abstractmethod
     def get_exciter_bpm(self) -> tuple[str, str]:
         """Return the two BPM names adjacent to the exciter."""
-        pass
-
-    @property
-    @abstractmethod
-    def tune_variables(self) -> tuple[str, str]:
-        """Return (qx_knob, qy_knob) MAD-X variable names for tune matching."""
-        pass
-
-    @property
-    @abstractmethod
-    def tune_integers(self) -> tuple[int, int]:
-        """Return (qx_integer, qy_integer) used for full tune targets."""
         pass
 
     def apply_accelerator_specific_errors(self, mad_iface: Any) -> None:

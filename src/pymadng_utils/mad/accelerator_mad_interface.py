@@ -58,6 +58,7 @@ class AcceleratorMadInterface:
         self.py_name = self.mad.py_name
         self.mad.send(SHUSHING_SCRIPT.read_text())
         self.mad.send("__observed_flag__ = MAD.element.flags.observed")
+        self.mad.send("MADX.option.rbarc = false")
 
         # Load the default sequence and set up the beam immediately, as these are common to all workflows.
         self.setup_sequence()
@@ -74,7 +75,7 @@ class AcceleratorMadInterface:
 
         logger.debug("Caching MAD translation for faster subsequent loads")
         mad_cache_path = file_path.with_suffix(".mad")
-        self.mad.send(f'MADX:load("{file_path}", "{mad_cache_path}")')
+        self.mad.send(f'MADX:load("{file_path}", "{mad_cache_path}", {{rbarc=false}})')
 
         if self.mad.MADX[self.accelerator.seq_name] == 0:
             raise ValueError(
@@ -89,10 +90,10 @@ class AcceleratorMadInterface:
         Set up beam parameters in MAD-NG based on the accelerator configuration.
         """
         self.mad.send(
-            f'loaded_sequence.beam = beam {{ particle = "{self.accelerator.particle}", pc={self.accelerator.pc:.15e} }}',
+            f'loaded_sequence.beam = beam {{ particle = "{self.accelerator.particle}", kinetic_energy={self.accelerator.kinetic_energy:.15e} }}',
         )
         logger.debug(
-            f"Setting beam: particle={self.accelerator.particle}, pc={self.accelerator.pc:.15e} GeV/c"
+            f"Setting beam: particle={self.accelerator.particle}, kinetic_energy={self.accelerator.kinetic_energy:.15e} GeV"
         )
 
     def setup_sequence(self) -> None:
@@ -471,8 +472,8 @@ local l, dknl, {attr} in loaded_sequence['{element_name}']
         """Match tunes using tune variables provided by the accelerator.
 
         Args:
-            target_qx: Target horizontal tune
-            target_qy: Target vertical tune
+            target_qx: Target horizontal tune (fractional or full)
+            target_qy: Target vertical tune (fractional or full)
             qx_knob: MAD variable name for horizontal tune knob (optional if accelerator provides get_tune_variables)
             qy_knob: MAD variable name for vertical tune knob (optional if accelerator provides get_tune_variables)
             deltap: Relative momentum deviation for tune matching (default: 0.0)
@@ -480,7 +481,13 @@ local l, dknl, {attr} in loaded_sequence['{element_name}']
         if qx_knob is None or qy_knob is None:
             qx_knob, qy_knob = self.accelerator.tune_variables
 
+        # Check if we have been given the total tunes rather than the fractional
         qx_int, qy_int = self.accelerator.tune_integers
+        if target_qx >= 1:
+            qx_int = 0
+        if target_qy >= 1:
+            qy_int = 0
+
         self.mad["result"] = self.mad.match(
             command=rf"\ -> twiss{{sequence=loaded_sequence, deltap={deltap:.16e}}}",
             variables=[

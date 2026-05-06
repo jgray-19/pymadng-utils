@@ -33,8 +33,7 @@ class LHC(Accelerator):
         self,
         beam: int,
         sequence_file: Path | str,
-        pc: float = 6800.0,
-        beam_energy: float | None = None,
+        kinetic_energy: float = 6800.0,
         bpm_pattern: str = BPM_PATTERN,
         particle: str = "proton",
         tune_knobs_suffix: str = "_op",
@@ -44,8 +43,7 @@ class LHC(Accelerator):
         Args:
             beam: Beam number (1 or 2)
             sequence_file: Path to sequence file
-            pc: Particle momentum in GeV/c (default 6800 GeV/c for LHC)
-            beam_energy: Backward-compatible alias for pc.
+            kinetic_energy: Particle kinetic energy in GeV (default 6800 GeV for LHC)
             bpm_pattern: Pattern for selecting BPMs
             particle: Type of particle (default "proton")
         Raises:
@@ -59,7 +57,7 @@ class LHC(Accelerator):
         # Initialise base Accelerator
         super().__init__(
             sequence_file=sequence_file,
-            pc=pc if beam_energy is None else beam_energy,
+            kinetic_energy=kinetic_energy,
             bpm_pattern=bpm_pattern,
             particle=particle,
         )
