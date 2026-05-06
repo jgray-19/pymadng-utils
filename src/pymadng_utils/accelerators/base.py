@@ -6,13 +6,16 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+PROTON_MASS_GEV = 0.9382720813
+ELECTRON_MASS_GEV = 0.0005109989461
+
+
 PARTICLE_MASSES_GEV = {
-    "proton": 0.9382720813,
-    "electron": 0.0005109989461,
-    "positron": 0.0005109989461,
+    "proton": PROTON_MASS_GEV,
+    "electron": ELECTRON_MASS_GEV,
+    "positron": ELECTRON_MASS_GEV,
 }
 
-PROTON_MASS_GEV = 0.9382720813
 
 
 class Accelerator(ABC):

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import contextlib
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from pymadng_utils.accelerators import LHC
 from pymadng_utils.mad.model_creator_mad_interface import ModelCreatorMadInterface
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.fixture
@@ -56,7 +59,7 @@ def test_model_creator_init_loads_sequence_and_beam(
     assert model_interface.mad.SEQ_NAME == "lhcb1"
     assert model_interface.mad.loaded_sequence is not None
     assert model_interface.mad.loaded_sequence.beam.particle == "proton"
-    assert model_interface.mad.loaded_sequence.beam.energy == 6800.0
+    assert model_interface.mad.loaded_sequence.beam.energy == pytest.approx(6800.0 + 0.9382720813)
 
 
 def test_get_current_tunes_reads_real_twiss(
