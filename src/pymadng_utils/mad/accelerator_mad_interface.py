@@ -90,10 +90,10 @@ class AcceleratorMadInterface:
         Set up beam parameters in MAD-NG based on the accelerator configuration.
         """
         self.mad.send(
-            f'loaded_sequence.beam = beam {{ particle = "{self.accelerator.particle}", kinetic_energy={self.accelerator.kinetic_energy:.15e} }}',
+            f'loaded_sequence.beam = beam {{ particle = "{self.accelerator.particle}", energy={self.accelerator.energy:.15e} }}',
         )
         logger.debug(
-            f"Setting beam: particle={self.accelerator.particle}, kinetic_energy={self.accelerator.kinetic_energy:.15e} GeV"
+            f"Setting beam: particle={self.accelerator.particle}, energy={self.accelerator.energy:.15e} GeV"
         )
 
     def setup_sequence(self) -> None:

@@ -56,7 +56,7 @@ def test_model_creator_init_loads_sequence_and_beam(
     assert model_interface.mad.SEQ_NAME == "lhcb1"
     assert model_interface.mad.loaded_sequence is not None
     assert model_interface.mad.loaded_sequence.beam.particle == "proton"
-    assert model_interface.mad.loaded_sequence.beam.kinetic_energy == 6800.0
+    assert model_interface.mad.loaded_sequence.beam.energy == 6800.0
 
 
 def test_get_current_tunes_reads_real_twiss(

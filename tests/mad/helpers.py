@@ -9,6 +9,8 @@ from __future__ import annotations
 import contextlib
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
 if TYPE_CHECKING:
     from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
 
@@ -51,7 +53,18 @@ def check_beam_setup(
     """Check beam setup properties."""
     assert particle == interface.mad.loaded_sequence.beam.particle
     if kinetic_energy is not None:
-        assert kinetic_energy == interface.mad.loaded_sequence.beam.kinetic_energy
+        print(
+            f"Checking beam energy: expected kinetic={kinetic_energy} GeV, "
+            f"got total={interface.mad.loaded_sequence.beam.energy} GeV, "
+            f"mass={interface.mad.loaded_sequence.beam.mass} GeV"
+            f"resulting kinetic={interface.mad.loaded_sequence.beam.energy - interface.mad.loaded_sequence.beam.mass} GeV"
+        )
+        assert np.isclose(
+            kinetic_energy,
+            interface.mad.loaded_sequence.beam.energy
+            - interface.mad.loaded_sequence.beam.mass,
+            rtol=1e-10,
+        )
     assert charge == interface.mad.loaded_sequence.beam.charge
     assert spin == interface.mad.loaded_sequence.beam.spin
 

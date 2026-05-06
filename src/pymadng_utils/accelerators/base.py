@@ -6,6 +6,12 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+PARTICLE_MASSES_GEV = {
+    "proton": 0.9382720813,
+    "electron": 0.0005109989461,
+    "positron": 0.0005109989461,
+}
+
 PROTON_MASS_GEV = 0.9382720813
 
 
@@ -26,6 +32,10 @@ class Accelerator(ABC):
     ) -> None:
         self.sequence_file = Path(sequence_file)
         self.kinetic_energy = float(kinetic_energy)
+        try:
+            self.energy = self.kinetic_energy + PARTICLE_MASSES_GEV[particle]
+        except KeyError:
+            raise ValueError(f"Unsupported particle: {particle}")
         self.bpm_pattern = str(bpm_pattern)
         self.particle = str(particle)
 
