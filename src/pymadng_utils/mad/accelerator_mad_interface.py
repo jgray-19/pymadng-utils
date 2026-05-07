@@ -209,9 +209,9 @@ correct_elm = MADX['{element_name}']
                 "Replacing markers currently not supported with non-centre reference or non-zero length"
             )
         self.mad.send(f"""
-local new_elm = MAD.element.marker '{marker_name}' {{ at=correct_elm.at, from=correct_elm.from }}
+local new_elm = MAD.element.marker '{marker_name}' {{ at=loaded_sequence:upos(correct_elm) }}
 local replaced = loaded_sequence:replace({{new_elm}}, '{element_name}')
-MADX['{element_name}'] = new_elm ! Replace in the madx environment for later reference
+MADX['{marker_name}'] = new_elm ! Replace in the madx environment for later reference
 {self.py_name}:send(replaced and #replaced or 0)
 correct_elm = nil
         """)
@@ -223,10 +223,10 @@ correct_elm = nil
         return marker_name
 
     def install_marker(
-        self, element_name: str, marker_name: str | None = None, offset: float = -1e-10
+        self, element_name: str, marker_name: str | None = None,
     ) -> str:
         """
-        Install a marker element near an existing element.
+        Installs a marker at the location of a specified element, replacing the element in the sequence.
 
         Args:
             element_name: Name of reference element
@@ -236,27 +236,14 @@ correct_elm = nil
         Returns:
             Name of the installed marker
         """
-        if marker_name is None:
-            marker_name = f"{element_name}_marker"
-
         elm_idx = self.mad.send(
             f"{self.py_name}:send(loaded_sequence:index_of('{element_name}'))"
         ).recv()
         if elm_idx is None:
             raise ValueError(f"Element '{element_name}' not found in loaded sequence")
-        if elm_idx <= 2:
-            # First index is always $start marker, second is first real element
-            offset = 1e-10  # Can't go before the first element -> MAD-NG bug
 
-        quoted_marker = self.mad.quote_strings(marker_name)
-        logger.debug(f"Installing marker {marker_name} at {element_name}")
-
-        self.mad.send(f"""
-loaded_sequence:install{{
-MAD.element.marker {quoted_marker} {{ at={offset}, from="{element_name}" }}
-}}
-""")
-        self.check_madng_succeded(f"Failed to install marker '{marker_name}' near element '{element_name}'")
+        marker_name = self.replace_with_marker(element_name, marker_name)
+        self.check_madng_succeded(f"Failed to install marker '{marker_name}' at element '{element_name}'")
         return marker_name
 
     def run_twiss(self, **twiss_kwargs) -> pd.DataFrame:
@@ -418,10 +405,11 @@ local l, dknl, {attr} in loaded_sequence['{element_name}']
 
                 if attr in _DKNL_STRENGTH_ATTRS:
                     self._set_dknl_component(str(elm.name), attr, delta)
+                    knob_attr = f"d{attr}l" if not attr.startswith("d") else attr
+                    magnet_strengths[f"{elm.name}.{knob_attr}"] = delta
                 else:
                     elm[attr] = strength_after
-
-                magnet_strengths[f"{elm.name}.{attr}"] = strength_after
+                    magnet_strengths[f"{elm.name}.{attr}"] = strength_after
                 true_strengths[str(elm.name)] = strength_after
                 break
 
