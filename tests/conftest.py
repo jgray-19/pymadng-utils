@@ -36,6 +36,12 @@ def seq_b1(data_dir: Path) -> Path:
 
 
 @pytest.fixture(scope="session")
+def seq_psb3(data_dir: Path) -> Path:
+    """Path to the example saved sequence file for PSB ring 3."""
+    return data_dir / "sequences" / "psb3_saved.seq"
+
+
+@pytest.fixture(scope="session")
 def lhc_b1(seq_b1: Path) -> LHC:
     """Reusable LHC accelerator descriptor for beam 1 tests."""
     return LHC(beam=1, sequence_file=seq_b1, kinetic_energy=6800.0)
@@ -45,6 +51,12 @@ def lhc_b1(seq_b1: Path) -> LHC:
 def acc_models_path(data_dir: Path) -> Path:
     """Path to the example accelerator models directory used by several tests."""
     return data_dir / "acc-models-lhc"
+
+
+@pytest.fixture(scope="session")
+def acc_models_psb_path(data_dir: Path) -> Path:
+    """Path to the minimal example PSB accelerator models directory."""
+    return data_dir / "acc-models-psb"
 
 
 @pytest.fixture(scope="function")

@@ -11,13 +11,16 @@ This script orchestrates the complete model creation workflow:
 from __future__ import annotations
 
 import logging
-import pathlib
+from typing import TYPE_CHECKING
 
 from omc3.model_creator import create_instance_and_model
 
 from pymadng_utils.accelerators import LHC
 from pymadng_utils.madx.make_sequence import make_madx_sequence
 from pymadng_utils.model_creator.madng_utils import update_model_with_madng
+
+if TYPE_CHECKING:
+    import pathlib
 
 LOGGER = logging.getLogger(__name__)
 
@@ -58,7 +61,7 @@ def create_lhc_model(
     fetch: str = "afs",
     path: str | None = None,
     nat_tunes: list[float] = [0.28, 0.31],
-    drv_tunes: list[float] = [0.27, 0.322],
+    drv_tunes: list[float] | None = [0.27, 0.322],
     energy: float = 6800.0,
     modifiers: str | list[str] | None = None,
 ) -> None:
@@ -157,30 +160,30 @@ def create_lhc_model(
     LOGGER.info(f"{'=' * 70}\n")
 
 
-def main() -> None:
-    """Main entry point for creating LHC models."""
-    # Determine output directory relative to this script
-    data_dir = pathlib.Path(__file__).parent.parent / "data"
+# def main() -> None:
+#     """Main entry point for creating LHC models."""
+#     # Determine output directory relative to this script
+#     data_dir = pathlib.Path(__file__).parent.parent / "data"
 
-    # Model naming convention: model_b{beam}__t{q1}_{q2}_{optics}
-    nat_tunes = [0.28, 0.31]
-    optics_label = "18cm"
+#     # Model naming convention: model_b{beam}__t{q1}_{q2}_{optics}
+#     nat_tunes = [0.28, 0.31]
+#     optics_label = "18cm"
 
-    print("\n" + "=" * 70)
-    print("LHC Model Creation Script")
-    print("=" * 70 + "\n")
+#     print("\n" + "=" * 70)
+#     print("LHC Model Creation Script")
+#     print("=" * 70 + "\n")
 
-    create_lhc_models(
-        beams=[1, 2],
-        data_dir=data_dir,
-        year="2025",
-        nat_tunes=nat_tunes,
-        optics_label=optics_label,
-    )
-    print("\n" + "=" * 70)
-    print("All models created successfully!")
-    print("=" * 70 + "\n")
+#     create_lhc_models(
+#         beams=[1, 2],
+#         data_dir=data_dir,
+#         year="2025",
+#         nat_tunes=nat_tunes,
+#         optics_label=optics_label,
+#     )
+#     print("\n" + "=" * 70)
+#     print("All models created successfully!")
+#     print("=" * 70 + "\n")
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

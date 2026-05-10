@@ -55,8 +55,8 @@ class PSB(Accelerator):
 
     @property
     def ac_dipole_location(self) -> tuple[str, float]:
-        """PSB does not use the LHC AC-dipole exciter model."""
-        raise NotImplementedError("PSB does not define an AC-dipole exciter marker")
+        """Return the PSB AC-dipole installation marker and offset."""
+        return (f"BR{self.ring}.DES3L1", 0.565 / 2)
 
     def get_exciter_bpm(self) -> tuple[str, str]:
         """Return the two BPMs adjacent to the PSB exciter."""

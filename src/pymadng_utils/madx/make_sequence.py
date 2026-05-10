@@ -11,19 +11,16 @@ from typing import TYPE_CHECKING
 import tfs
 from cpymad.madx import Madx
 from omc3.model.accelerators.lhc import Lhc
-from omc3.model.accelerators.psbooster import Psbooster
 from omc3.model.accelerators.sps import Sps
 from omc3.model.constants import JOB_MODEL_MADX_NOMINAL
 from omc3.model.model_creators.manager import CreatorType, get_model_creator_class
 
 from pymadng_utils.madx.constants import (
     _DEFINE_NOMINAL_BEAMS_RE,
-    _LHC_SEQUENCE_TOKEN_RE,
     _LHC_USE_SEQUENCE_RE,
     _LHC_YEAR_RE,
     _POST_OPTICS_INSERT_MARKERS,
     _PSB_MATCH_END_RE,
-    _PSB_SEQUENCE_TOKEN_RE,
     _PSB_USE_SEQUENCE_RE,
 )
 
@@ -33,6 +30,16 @@ if TYPE_CHECKING:
     from omc3.model.model_creators.abstract_model_creator import ModelCreator
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _read_nominal_job_text(model_dir: Path) -> str:
+    """Return the nominal OMC3 MAD-X job file contents."""
+    job_file = model_dir / JOB_MODEL_MADX_NOMINAL
+    if not job_file.exists():
+        raise FileNotFoundError(
+            f"Expected nominal MAD-X job file not found: {job_file}"
+        )
+    return job_file.read_text(errors="ignore")
 
 
 def _adapt_script_to_beam4(base_script: str, beam: int, energy: float) -> str:
@@ -50,94 +57,46 @@ def _adapt_script_to_beam4(base_script: str, beam: int, energy: float) -> str:
 
 
 def _detect_accelerator_from_model_dir(model_dir: Path) -> str:
-    """Infer accelerator family from model folder contents."""
-    if (model_dir / Lhc.LOCAL_REPO_NAME).exists():
+    """Infer accelerator family from the nominal MAD-X job file."""
+    job_text = _read_nominal_job_text(model_dir)
+    if _LHC_USE_SEQUENCE_RE.search(job_text):
         return "lhc"
-    if (model_dir / Sps.LOCAL_REPO_NAME).exists():
+    if re.search(r"use\s*,\s*sequence\s*=\s*sps\b", job_text, re.IGNORECASE):
         return "sps"
-    if (model_dir / Psbooster.LOCAL_REPO_NAME).exists():
+    if _PSB_USE_SEQUENCE_RE.search(job_text):
         return "psb"
-
-    job_file = model_dir / JOB_MODEL_MADX_NOMINAL
-    if job_file.exists():
-        job_text = job_file.read_text(errors="ignore").lower()
-        if (
-            Lhc.LOCAL_REPO_NAME in job_text
-            or "lhcb1" in job_text
-            or "lhcb2" in job_text
-        ):
-            return "lhc"
-        if (
-            Sps.LOCAL_REPO_NAME in job_text
-            or "sps.seq" in job_text
-            or "sequence=sps" in job_text
-        ):
-            return "sps"
-        if (
-            Psbooster.LOCAL_REPO_NAME in job_text
-            or "psb.seq" in job_text
-            or "sequence=psb" in job_text
-        ):
-            return "psb"
 
     raise ValueError(
         f"Could not infer accelerator type from model directory: {model_dir}. "
-        "Expected LHC, SPS, or PSB model layout."
+        "Expected the nominal MAD-X job file to contain an explicit "
+        "`use, sequence=...;` statement for LHC, SPS, or PSB."
     )
 
 
 def _detect_lhc_beam_from_model_dir(model_dir: Path) -> int:
-    """Infer LHC beam number from model folder contents."""
-    job_file = model_dir / JOB_MODEL_MADX_NOMINAL
-    if job_file.exists():
-        text = job_file.read_text(errors="ignore")
-        use_matches = {
-            int(match.group(1)) for match in _LHC_USE_SEQUENCE_RE.finditer(text)
-        }
-        if len(use_matches) == 1:
-            beam = use_matches.pop()
-            LOGGER.info(
-                "Inferred LHC beam %d from use statement in MAD-X nominal job file: %s",
-                beam,
-                job_file,
-            )
-            return beam
-
-        token_matches = {
-            int(match.group(1)) for match in _LHC_SEQUENCE_TOKEN_RE.finditer(text)
-        }
-        if len(token_matches) == 1:
-            beam = token_matches.pop()
-            LOGGER.info(
-                "Inferred LHC beam %d from sequence tokens in MAD-X nominal job file: %s",
-                beam,
-                job_file,
-            )
-            return beam
-
-    name = model_dir.name.lower()
-    has_b1 = "b1" in name
-    has_b2 = "b2" in name
-    if has_b1 and not has_b2:
-        LOGGER.info("Inferred LHC beam 1 from model directory name: %s", model_dir)
-        return 1
-    if has_b2 and not has_b1:
-        LOGGER.info("Inferred LHC beam 2 from model directory name: %s", model_dir)
-        return 2
+    """Infer LHC beam number from the nominal MAD-X job file."""
+    text = _read_nominal_job_text(model_dir)
+    use_matches = {int(match.group(1)) for match in _LHC_USE_SEQUENCE_RE.finditer(text)}
+    if len(use_matches) == 1:
+        beam = use_matches.pop()
+        LOGGER.info(
+            "Inferred LHC beam %d from use statement in MAD-X nominal job file.",
+            beam,
+        )
+        return beam
 
     raise ValueError(
         f"Could not infer LHC beam from model directory: {model_dir}. "
-        "Provide a model directory with an unambiguous beam."
+        "Expected exactly one explicit `use, sequence=lhcb1;` or "
+        "`use, sequence=lhcb2;` statement in the nominal MAD-X job file."
     )
 
 
 def _detect_lhc_year_from_model_dir(model_dir: Path) -> str:
     """Infer LHC optics year from the nominal omc3 MAD-X header."""
-    job_file = model_dir / JOB_MODEL_MADX_NOMINAL
-    if job_file.exists():
-        match = _LHC_YEAR_RE.search(job_file.read_text(errors="ignore"))
-        if match is not None:
-            return match.group("year")
+    match = _LHC_YEAR_RE.search(_read_nominal_job_text(model_dir))
+    if match is not None:
+        return match.group("year")
 
     raise ValueError(
         f"Could not infer LHC year from model directory: {model_dir}. "
@@ -146,30 +105,16 @@ def _detect_lhc_year_from_model_dir(model_dir: Path) -> str:
 
 
 def _detect_psb_ring_from_model_dir(model_dir: Path) -> int:
-    """Infer PSB ring number from job file or directory name."""
-    job_file = model_dir / JOB_MODEL_MADX_NOMINAL
-    if job_file.exists():
-        text = job_file.read_text(errors="ignore")
-        use_matches = {
-            int(match.group(1)) for match in _PSB_USE_SEQUENCE_RE.finditer(text)
-        }
-        if len(use_matches) == 1:
-            return use_matches.pop()
-
-        token_matches = {
-            int(match.group(1)) for match in _PSB_SEQUENCE_TOKEN_RE.finditer(text)
-        }
-        if len(token_matches) == 1:
-            return token_matches.pop()
-
-    name = model_dir.name.lower()
-    for ring in range(1, 5):
-        if f"ring{ring}" in name or f"psb{ring}" in name:
-            return ring
+    """Infer PSB ring number from the nominal MAD-X job file."""
+    text = _read_nominal_job_text(model_dir)
+    use_matches = {int(match.group(1)) for match in _PSB_USE_SEQUENCE_RE.finditer(text)}
+    if len(use_matches) == 1:
+        return use_matches.pop()
 
     raise ValueError(
         f"Could not infer PSB ring from model directory: {model_dir}. "
-        "Expected an unambiguous `use, sequence=psbN;` statement."
+        "Expected exactly one explicit `use, sequence=psbN;` statement in the "
+        "nominal MAD-X job file."
     )
 
 
@@ -186,9 +131,7 @@ def _has_acd(model_dir: Path) -> bool:
     return (model_dir / "twiss_ac.dat").exists()
 
 
-def _rewrite_psb_ac_maps_to_acdipoles(
-    seq_path: Path, model_dir: Path, job_text: str
-) -> None:
+def _rewrite_psb_ac_maps_to_acdipoles(seq_path: Path, model_dir: Path) -> None:
     """Adjust PSB AC-map content in the saved sequence.
 
     For ACD-off inputs, remove the thin map definitions and placements entirely.
@@ -274,14 +217,8 @@ def _make_psb_sequence(
     seq_outdir: Path,
 ) -> tuple[Path, int]:
     """Generate a matched PSB sequence from an existing nominal MAD-X job file."""
-    job_file = model_dir / JOB_MODEL_MADX_NOMINAL
-    if not job_file.exists():
-        raise FileNotFoundError(
-            f"Expected PSB nominal MAD-X job file not found: {job_file}"
-        )
-
     ring = _detect_psb_ring_from_model_dir(model_dir)
-    job_text = job_file.read_text()
+    job_text = _read_nominal_job_text(model_dir)
     # The script takes everything up to the end of the match block.
     madx_script = _extract_psb_script(job_text)
     save_script = (
@@ -306,7 +243,7 @@ def _make_psb_sequence(
         shutil.copy2(saved_seq, seq_path)
         saved_seq.unlink(missing_ok=True)
 
-    _rewrite_psb_ac_maps_to_acdipoles(seq_path, model_dir, job_text)
+    _rewrite_psb_ac_maps_to_acdipoles(seq_path, model_dir)
     return seq_path, ring
 
 
