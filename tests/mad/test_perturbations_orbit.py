@@ -32,6 +32,11 @@ def _get_effective_strength(
     return interface.get_magnet_strengths([f"{element_name}.{attr}"])[f"{element_name}.{attr}"]
 
 
+def _get_perturbation_knob_name(element_name: str, attr: str) -> str:
+    knob_attr = f"d{attr}l" if attr in {"k0", "k1", "k2"} else attr
+    return f"{element_name}.{knob_attr}"
+
+
 def test_effective_strength_matches_base_when_dknl_not_created(
     lhc_interface: AcceleratorMadInterface,
 ) -> None:
@@ -76,9 +81,9 @@ def test_lhc_quadrupole_perturbation_modes(
         abs(k1_non_table_before), 1e-12
     )
     assert (non_table_rel_change > 1e-3) == expect_non_table_changed
-    assert f"{table_family_quad}.k1" in magnet_strengths
+    assert _get_perturbation_knob_name(table_family_quad, "k1") in magnet_strengths
     if expect_non_table_changed:
-        assert f"{non_table_quad}.k1" in magnet_strengths
+        assert _get_perturbation_knob_name(non_table_quad, "k1") in magnet_strengths
 
 
 def test_perform_orbit_correction_writes_corrector_table_and_matches_tunes(
