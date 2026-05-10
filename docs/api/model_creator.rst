@@ -6,9 +6,16 @@ Model Creator
 Typical workflow
 ----------------
 
-#. Create or fetch a base model with ``create_lhc_model``.
-#. Generate saved MAD-X sequences with the helpers in ``pymadng_utils.madx.make_sequence``.
-#. Re-open the model in MAD-NG and export TWISS tables with ``update_model_with_madng``.
+#. Create or fetch a base model directory with OMC3.
+#. Generate a saved MAD-X sequence with ``pymadng_utils.madx.make_sequence.make_madx_sequence``.
+#. Re-open that sequence in MAD-NG and export TWISS tables with ``update_model_with_madng``.
+
+Notes
+-----
+
+* ``create_lhc_model`` is the packaged end-to-end workflow for LHC.
+* PSB tests currently call ``omc3.model_creator.create_instance_and_model()`` directly and then use the MAD-X and MAD-NG helper layers from this package.
+* Sequence generation intentionally expects a real nominal OMC3 job file and now raises on ambiguous layouts instead of guessing from directory names.
 
 Create models
 -------------

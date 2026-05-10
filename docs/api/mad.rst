@@ -20,6 +20,13 @@ The MAD interface stack is intentionally split:
 * Use ``AcceleratorErrorsMadInterface`` when the accelerator descriptor provides an ``apply_accelerator_specific_errors`` hook and you want that hook executed automatically.
 * Use ``KnobMadInterface`` or ``ModelCreatorMadInterface`` on top when the workflow also needs corrector-file, knob-file, or export helpers.
 
+Practical guidance
+------------------
+
+* Start with ``AcceleratorMadInterface`` unless you know you need one of the specialised wrappers.
+* Use ``ModelCreatorMadInterface`` indirectly through ``update_model_with_madng`` for model-directory workflows.
+* Treat the accelerator descriptor as part of the runtime contract: tune variables, sequence naming, BPM patterns, and AC-dipole placement all come from that object.
+
 Package exports
 ---------------
 
