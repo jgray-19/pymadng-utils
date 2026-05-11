@@ -6,7 +6,9 @@ This module contains pytest tests for the AcceleratorMadInterface class.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import logging
+import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -21,9 +23,6 @@ from tests.mad.helpers import (
     cleanup_interface,
     get_marker_and_element_positions,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class MissingSequenceLHC(LHC):
@@ -315,3 +314,35 @@ def test_install_ac_dipole_and_twiss(loaded_ac_interface_with_beam) -> None:
     assert np.isclose(drv_qy, drv_tunes[1], atol=tolerance), (
         f"Q2 not driven correctly: expected {drv_tunes[1]:.6f}, got {drv_qy:.6f}"
     )
+
+
+def _run_match_tunes_capture_output(seq_b1, log_level: int) -> int:
+    """Run match_tunes at the given log level and return MAD stdout length."""
+    ami_logger = logging.getLogger("pymadng_utils.mad.accelerator_mad_interface")
+    ami_logger.setLevel(log_level)
+    with tempfile.NamedTemporaryFile(mode="r", suffix=".txt", delete=False) as f:
+        tmp_path = f.name
+    iface = AcceleratorMadInterface(
+        accelerator=LHC(beam=1, sequence_file=seq_b1, kinetic_energy=6800.0),
+        stdout=tmp_path,
+    )
+    try:
+        iface.match_tunes(target_qx=0.28, target_qy=0.31)
+    finally:
+        iface.close()
+    print(log_level, Path(tmp_path).read_text())
+    return len(Path(tmp_path).read_text())
+
+
+def test_match_tunes_verbosity_scales_with_log_level(seq_b1) -> None:
+    """More verbose logging levels produce more MAD-NG output during match_tunes."""
+    ami_logger = logging.getLogger("pymadng_utils.mad.accelerator_mad_interface")
+    original_level = ami_logger.level
+    try:
+        n_warning = _run_match_tunes_capture_output(seq_b1, logging.WARNING)
+        n_info = _run_match_tunes_capture_output(seq_b1, logging.INFO)
+        n_debug = _run_match_tunes_capture_output(seq_b1, logging.DEBUG)
+    finally:
+        ami_logger.setLevel(original_level)
+
+    assert n_debug > n_info > n_warning

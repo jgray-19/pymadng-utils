@@ -452,7 +452,7 @@ local l, dknl, {attr} in loaded_sequence['{element_name}']
     def _info_required(self) -> int:
         # If the logging level is info, we want info = 2, if it's debug, we want info = 5 at least
         if logger.isEnabledFor(logging.DEBUG):
-            return 5
+            return 7
         if logger.isEnabledFor(logging.INFO):
             return 2
         return 0
