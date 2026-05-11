@@ -449,6 +449,14 @@ local l, dknl, {attr} in loaded_sequence['{element_name}']
             logger.debug("Closing MAD interface")
             self.mad.close()
 
+    def _info_required(self) -> int:
+        # If the logging level is info, we want info = 2, if it's debug, we want info = 5 at least
+        if logger.isEnabledFor(logging.DEBUG):
+            return 5
+        if logger.isEnabledFor(logging.INFO):
+            return 2
+        return 0
+
     def match_tunes(
         self,
         target_qx: float,
@@ -487,7 +495,7 @@ local l, dknl, {attr} in loaded_sequence['{element_name}']
                 {"expr": f"\\t -> t.q2-({qy_int}+{target_qy})", "name": "'q2'"},
             ],
             objective={"fmin": 1e-8},
-            info=2,
+            info=self._info_required(),
         )
         return {
             qx_knob: self.mad[f"MADX['{qx_knob}']"],
@@ -541,7 +549,7 @@ match {{
     {{ expr = \t -> t.q2-{qy_int + target_qy:.16e}, name='q2' }},
   }},
   objective = {{fmin = 1e-8}},
-  info=2
+  info={self._info_required()}
 }}
 
 {self.py_name}:send("Complete")

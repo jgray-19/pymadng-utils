@@ -71,3 +71,15 @@ class Accelerator(ABC):
     def get_perturbation_families(self) -> dict[str, dict[str, str | float | dict]]:
         """Return per-family perturbation metadata keyed by family code d/q/s."""
         return {}
+
+    @property
+    @abstractmethod
+    def tune_variables(self) -> tuple[str, str]:
+        """Return PSB tune variable names."""
+        pass
+
+    @property
+    @abstractmethod
+    def tune_integers(self) -> tuple[int, int]:
+        """Return PSB integer tunes."""
+        pass
