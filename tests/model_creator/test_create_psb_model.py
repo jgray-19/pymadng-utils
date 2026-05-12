@@ -101,8 +101,9 @@ def test_create_psb_model_via_omc3_api(psb_model_dir: Path) -> None:
         assert (psb_model_dir / file_name).exists(), f"Missing {file_name}"
 
     sequence_text = (psb_model_dir / "psb3_saved.seq").read_text()
-    assert "hacmap: hackicker" in sequence_text
-    assert "vacmap: vackicker" in sequence_text
+    # If there is no ACD excitation, we should not have any ACD markers in the sequence
+    assert "hacmap: hackicker" not in sequence_text
+    assert "vacmap: vackicker" not in sequence_text
     assert "matrix" not in sequence_text
 
     twiss = tfs.read(psb_model_dir / "twiss.dat", index="NAME")
@@ -115,8 +116,8 @@ def test_create_psb_model_via_omc3_api(psb_model_dir: Path) -> None:
     assert abs(twiss_ac.headers["Q1"] % 1 - PSB_NAT_TUNES[0]) < 1e-6
     assert abs(twiss_ac.headers["Q2"] % 1 - PSB_NAT_TUNES[1]) < 1e-6
     assert "BR3.BPM3L3" in twiss.index
-    assert "HACMAP" in twiss_elements.index
-    assert "VACMAP" in twiss_elements.index
+    assert "HACMAP" not in twiss_elements.index
+    assert "VACMAP" not in twiss_elements.index
 
 
 def test_create_psb_model_with_explicit_acd(

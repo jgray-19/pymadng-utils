@@ -148,32 +148,34 @@ def test_cycle_sequence_invalid_marker_raises(
             "MyMarker",
         ),
     ],
-    ids=["default_marker", "custom_marker"],
+    ids=["same_name", "custom_name"],
 )
-def test_install_marker(
+def test_make_element_thin(
     loaded_interface: AcceleratorMadInterface,
     element_name,
     marker_name,
     expected_marker_name,
 ) -> None:
-    """Test installing a marker element."""
+    """Test that make_element_thin replaces an element in-place, preserving kind and position."""
     interface = loaded_interface
+
+    interface.mad.send(f"py:send(MADX['{element_name}'].kind)")
+    kind_before = interface.mad.recv()
+
     (
         marker_position_before,
         marker_index_before,
         elem_position_before,
         elem_index_before,
     ) = get_marker_and_element_positions(interface, expected_marker_name, element_name)
-    ret_name = interface.install_marker(element_name, marker_name)
+    ret_name = interface.make_element_thin(element_name, marker_name)
     marker_position_after, marker_index_after, elem_position_after, elem_index_after = (
         get_marker_and_element_positions(interface, expected_marker_name, element_name)
     )
+
     if element_name != expected_marker_name:
-        # Check marker doesn't exist before
         assert marker_position_before is None
         assert marker_index_before is None
-
-        # Check element doesn't exist after
         assert elem_position_after is None
         assert elem_index_after is None
     else:
@@ -184,24 +186,20 @@ def test_install_marker(
     assert marker_position_after == elem_position_before
     assert ret_name == expected_marker_name
 
+    interface.mad.send(f"py:send(MADX['{expected_marker_name}'].kind)")
+    kind_after = interface.mad.recv()
+    assert kind_after == kind_before
 
-def test_install_marker_missing_element_raises(
+    interface.mad.send(f"py:send(loaded_sequence['{expected_marker_name}'].l)")
+    assert interface.mad.recv() == 0
+
+
+def test_make_element_thin_missing_element_raises(
     loaded_interface: AcceleratorMadInterface,
 ) -> None:
-    """Installing a marker near a missing element should raise a clear error."""
-    with pytest.raises(
-        ValueError,
-        match=r"Element 'NOT_AN_ELEMENT' not found in loaded sequence",
-    ):
-        loaded_interface.install_marker("NOT_AN_ELEMENT")
-
-
-def test_replace_with_marker_missing_element_raises(
-    loaded_interface: AcceleratorMadInterface,
-) -> None:
-    """Replacing a missing element should raise a clear error."""
+    """Making a missing element thin should raise a clear error."""
     with pytest.raises(ValueError, match=r"Could not find element: NOT_AN_ELEMENT"):
-        loaded_interface.replace_with_marker("NOT_AN_ELEMENT")
+        loaded_interface.make_element_thin("NOT_AN_ELEMENT")
 
 
 def test_getset_variables(interface: AcceleratorMadInterface) -> None:

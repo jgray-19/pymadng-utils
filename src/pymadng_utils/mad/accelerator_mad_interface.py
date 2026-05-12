@@ -179,11 +179,11 @@ class AcceleratorMadInterface:
             logger.error(f"Error during sequence cycling: {e}")
             raise RuntimeError("Cycle failed - check MAD output for details") from e
 
-    def replace_with_marker(
+    def make_element_thin(
         self, element_name: str, marker_name: str | None = None
     ) -> str:
         """
-        Replace an element with a marker.
+        Make an element thin by replacing it with a marker.
 
         Args:
             element_name: Name of the element to replace
@@ -209,7 +209,7 @@ correct_elm = MADX['{element_name}']
                 "Replacing markers currently not supported with non-centre reference or non-zero length"
             )
         self.mad.send(f"""
-local new_elm = MAD.element.marker '{marker_name}' {{ at=loaded_sequence:upos(correct_elm) }}
+local new_elm = MAD.element[loaded_sequence['{element_name}'].kind] ('{marker_name}') {{ at=loaded_sequence:upos(correct_elm) }}
 local replaced = loaded_sequence:replace({{new_elm}}, '{element_name}')
 MADX['{marker_name}'] = new_elm ! Replace in the madx environment for later reference
 {self.py_name}:send(replaced and #replaced or 0)
@@ -220,30 +220,6 @@ correct_elm = nil
                 f"Element replacement failed, replaced {n_replaced} elements instead of 1"
             )
 
-        return marker_name
-
-    def install_marker(
-        self, element_name: str, marker_name: str | None = None,
-    ) -> str:
-        """
-        Installs a marker at the location of a specified element, replacing the element in the sequence.
-
-        Args:
-            element_name: Name of reference element
-            marker_name: Name for new marker (auto-generated if None)
-            offset: Offset from reference element
-
-        Returns:
-            Name of the installed marker
-        """
-        elm_idx = self.mad.send(
-            f"{self.py_name}:send(loaded_sequence:index_of('{element_name}'))"
-        ).recv()
-        if elm_idx is None:
-            raise ValueError(f"Element '{element_name}' not found in loaded sequence")
-
-        marker_name = self.replace_with_marker(element_name, marker_name)
-        self.check_madng_succeded(f"Failed to install marker '{marker_name}' at element '{element_name}'")
         return marker_name
 
     def run_twiss(self, **twiss_kwargs) -> pd.DataFrame:

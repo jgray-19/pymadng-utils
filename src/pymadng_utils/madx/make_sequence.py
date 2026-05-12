@@ -141,56 +141,47 @@ def _rewrite_psb_ac_maps_to_acdipoles(seq_path: Path, model_dir: Path) -> None:
     """
     seq_text = seq_path.read_text()
 
-    # Natural tunes
     twiss = tfs.read(model_dir / "twiss.dat", index="NAME")
-    qx = twiss.headers["Q1"]
-    qy = twiss.headers["Q2"]
-
-    if _has_acd(model_dir):
-        twiss_ac = tfs.read(model_dir / "twiss_ac.dat", index="NAME")
-        qxd = twiss_ac.headers["Q1"]
-        qyd = twiss_ac.headers["Q2"]
-    else:
-        qxd = qx
-        qyd = qy
-
+    twiss_ac = (
+        tfs.read(model_dir / "twiss_ac.dat", index="NAME")
+        if _has_acd(model_dir)
+        else twiss
+    )
     twiss_elements = tfs.read(model_dir / "twiss_elements.dat", index="NAME")
-    betxac = twiss_elements.loc["HACMAP", "BETX"]
-    betyac = twiss_elements.loc["VACMAP", "BETY"]
 
-    seq_text = re.sub(
-        r"(?im)^\s*hacmap21\s*=\s*[^;]+;\s*$",
-        "",
-        seq_text,
-    )
-    seq_text = re.sub(
-        r"(?im)^\s*vacmap43\s*=\s*[^;]+;\s*$",
-        "",
-        seq_text,
-    )
-    # If nat_q == drv_q, the kick becomes zero, therefore the element will just be ignored.
-    seq_text = re.sub(
-        r"(?im)^\s*hacmap\s*:\s*matrix\s*,\s*l:?=\s*[^;]+;\s*$",
+    for coeff_pat, elm, nat_q, drv_q, bet in [
         (
-            "hacmap: hackicker,"
-            f"l:={0.0:.16e},"
-            f"nat_q:={qx:.16e},"
-            f"drv_q:={qxd:.16e},"
-            f"ac_bet:={betxac:.16e};"
+            r"(?im)^\s*hacmap21\s*=\s*[^;]+;\s*$",
+            "hacmap",
+            twiss.headers["Q1"],
+            twiss_ac.headers["Q1"],
+            twiss_elements.loc["HACMAP", "BETX"],
         ),
-        seq_text,
-    )
-    seq_text = re.sub(
-        r"(?im)^\s*vacmap\s*:\s*matrix\s*,\s*l:?=\s*[^;]+;\s*$",
         (
-            "vacmap: vackicker,"
-            f"l:={0.0:.16e},"
-            f"nat_q:={qy:.16e},"
-            f"drv_q:={qyd:.16e},"
-            f"ac_bet:={betyac:.16e};"
+            r"(?im)^\s*vacmap43\s*=\s*[^;]+;\s*$",
+            "vacmap",
+            twiss.headers["Q2"],
+            twiss_ac.headers["Q2"],
+            twiss_elements.loc["VACMAP", "BETY"],
         ),
-        seq_text,
-    )
+    ]:
+        seq_text = re.sub(coeff_pat, "", seq_text)
+        kicker = elm.replace("map", "kicker")
+        mat_pat = rf"(?im)^\s*{elm}\s*:\s*matrix\s*,\s*l:?=\s*[^;]+;\s*$"
+        if nat_q == drv_q:
+            # No ACD: remove the definition and any placement in the sequence body.
+            seq_text = re.sub(mat_pat, "", seq_text)
+            seq_text = re.sub(rf"(?im)^\s*{elm}\s*,\s*at\s*=[^;]+;\s*$", "", seq_text)
+        else:
+            replacement = (
+                f"{elm}: {kicker},"
+                f"l:={0.0:.16e},"
+                f"nat_q:={nat_q:.16e},"
+                f"drv_q:={drv_q:.16e},"
+                f"ac_bet:={bet:.16e};"
+            )
+            seq_text = re.sub(mat_pat, replacement, seq_text)
+
     seq_path.write_text(seq_text)
 
 
