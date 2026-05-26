@@ -34,6 +34,7 @@ class PSB(Accelerator):
         kinetic_energy: float = PSB_FLAT_BOTTOM_GEV,
         bpm_pattern: str | None = None,
         particle: str = "proton",
+        **kwargs,
     ) -> None:
         if ring is None:
             ring = _infer_psb_ring_number(Path(sequence_file))
@@ -46,6 +47,7 @@ class PSB(Accelerator):
             kinetic_energy=kinetic_energy,
             bpm_pattern=bpm_pattern or self.BPM_PATTERN_TEMPLATE.format(ring=ring),
             particle=particle,
+            **kwargs,
         )
 
     @property
@@ -58,9 +60,9 @@ class PSB(Accelerator):
         """Return the PSB AC-dipole installation marker and offset."""
         return (f"BR{self.ring}.DES3L1", 0.565 / 2)
 
-    def get_exciter_bpm(self) -> tuple[str, str]:
-        """Return the two BPMs adjacent to the PSB exciter."""
-        return f"BR{self.ring}.BPM3L3", f"BR{self.ring}.BPM4L3"
+    # def get_exciter_bpm(self) -> tuple[str, str]:
+    #     """Return the two BPMs adjacent to the PSB exciter."""
+    #     return f"BR{self.ring}.BPM3L3", f"BR{self.ring}.BPM4L3"
 
     @property
     def tune_variables(self) -> tuple[str, str]:

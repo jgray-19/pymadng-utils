@@ -37,6 +37,7 @@ class LHC(Accelerator):
         bpm_pattern: str = BPM_PATTERN,
         particle: str = "proton",
         tune_knobs_suffix: str = "_op",
+        **kwargs,
     ):
         """Initialise LHC accelerator for a specific beam.
 
@@ -53,13 +54,12 @@ class LHC(Accelerator):
             raise ValueError(f"LHC beam must be 1 or 2, got {beam}")
         self.beam = beam
         self.tune_knobs_suffix = tune_knobs_suffix
-
-        # Initialise base Accelerator
         super().__init__(
             sequence_file=sequence_file,
             kinetic_energy=kinetic_energy,
             bpm_pattern=bpm_pattern,
             particle=particle,
+            **kwargs,
         )
 
     @property
@@ -89,12 +89,12 @@ class LHC(Accelerator):
         """Return the LHC AC-dipole exciter marker."""
         return f"MKQA.6L4.B{self.beam}"
 
-    def get_exciter_bpm(self) -> tuple[str, str] | None:
-        """Return the two BPMs adjacent to the LHC AC-dipole."""
-        return (
-            f"BPMY{'A' if self.beam == 1 else 'B'}.6L4.B{self.beam}",
-            f"BPM.7L4.B{self.beam}",
-        )
+    # def get_exciter_bpm(self) -> tuple[str, str] | None:
+    #     """Return the two BPMs adjacent to the LHC AC-dipole."""
+    #     return (
+    #         f"BPMY{'A' if self.beam == 1 else 'B'}.6L4.B{self.beam}",
+    #         f"BPM.7L4.B{self.beam}",
+    #     )
 
     def get_perturbation_families(self) -> dict[str, dict[str, float | str | dict]]:
         """Return perturbation-family metadata for LHC magnets."""

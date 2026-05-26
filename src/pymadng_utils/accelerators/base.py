@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any  # noqa: F401 — used in __init__ signature
 
 PROTON_MASS_GEV = 0.9382720813
-ELECTRON_MASS_GEV = 0.0005109989461
-
+ELECTRON_MASS_GEV = 5.109989461e-4
 
 PARTICLE_MASSES_GEV = {
     "proton": PROTON_MASS_GEV,
@@ -32,7 +31,10 @@ class Accelerator(ABC):
         kinetic_energy: float,
         bpm_pattern: str = "BPM",
         particle: str = "proton",
+        **kwargs: Any,
     ) -> None:
+        assert not kwargs, f"Unexpected keyword arguments: {list(kwargs)}"
+        super().__init__()
         self.sequence_file = Path(sequence_file)
         self.kinetic_energy = float(kinetic_energy)
         try:
@@ -58,11 +60,11 @@ class Accelerator(ABC):
         """Return the AC-dipole exciter marker and the offset from the marker for installation."""
         pass
 
-    @property
-    @abstractmethod
-    def get_exciter_bpm(self) -> tuple[str, str]:
-        """Return the two BPM names adjacent to the exciter."""
-        pass
+    # @property
+    # @abstractmethod
+    # def get_exciter_bpm(self) -> tuple[str, str]:
+    #     """Return the two BPM names adjacent to the exciter."""
+    #     pass
 
     def apply_accelerator_specific_errors(self, mad_iface: Any) -> None:
         """Apply machine-specific startup errors to a loaded MAD sequence."""
