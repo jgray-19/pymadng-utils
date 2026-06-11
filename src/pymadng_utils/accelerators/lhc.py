@@ -81,12 +81,8 @@ class LHC(Accelerator):
         return 62, 60
 
     @property
-    def ac_dipole_location(self) -> tuple[str, float]:
-        """Return the LHC AC-dipole exciter marker and offset."""
-        return (self.get_ac_dipole_marker(), 1.583 / 2)
-
-    def get_ac_dipole_marker(self) -> str:
-        """Return the LHC AC-dipole exciter marker."""
+    def ac_dipole_name(self) -> str:
+        """Return the LHC AC-dipole exciter marker and offset with respect to the centre."""
         return f"MKQA.6L4.B{self.beam}"
 
     # def get_exciter_bpm(self) -> tuple[str, str] | None:

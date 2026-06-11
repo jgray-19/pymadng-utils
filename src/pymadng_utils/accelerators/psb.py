@@ -56,13 +56,13 @@ class PSB(Accelerator):
         return f"psb{self.ring}"
 
     @property
-    def ac_dipole_location(self) -> tuple[str, float]:
-        """Return the PSB AC-dipole installation element and offset.
+    def ac_dipole_name(self) -> str:
+        """Return the PSB AC-dipole installation element.
 
         DES3L1 is the thick exciter element itself; its sequence position
         (refer=centre) is already the kick centre, so the offset is zero.
         """
-        return (f"BR{self.ring}.DES3L1", 0.0)
+        return f"BR{self.ring}.DES3L1"
 
     # def get_exciter_bpm(self) -> tuple[str, str]:
     #     """Return the two BPMs adjacent to the PSB exciter."""

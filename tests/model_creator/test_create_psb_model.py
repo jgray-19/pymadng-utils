@@ -125,7 +125,7 @@ def test_create_psb_model_with_explicit_acd(
 ) -> None:
     """Explicit driven tunes plus ACD excitation should produce a driven PSB model."""
     accelerator = PSB(sequence_file=psb_model_dir_with_acd / "psb3_saved.seq", ring=3)
-    install_marker, install_offset = accelerator.ac_dipole_location
+    install_marker = accelerator.ac_dipole_name
 
     twiss = tfs.read(psb_model_dir_with_acd / "twiss.dat", index="NAME")
     twiss_ac = tfs.read(psb_model_dir_with_acd / "twiss_ac.dat", index="NAME")
@@ -138,7 +138,6 @@ def test_create_psb_model_with_explicit_acd(
     assert abs(twiss_ac.headers["Q1"] % 1 - PSB_DRV_TUNES[0]) < 1e-6
     assert abs(twiss_ac.headers["Q2"] % 1 - PSB_DRV_TUNES[1]) < 1e-6
     assert install_marker in twiss_elements.index
-    assert install_offset == 0.565 / 2
     assert abs(twiss_elements.loc["HACMAP", "S"] - twiss_elements.loc["VACMAP", "S"]) < 1e-9
     assert abs(twiss_elements.loc["HACMAP", "S"] - twiss_elements.loc[install_marker, "S"]) < 1e-9
 

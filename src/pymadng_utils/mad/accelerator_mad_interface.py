@@ -237,7 +237,7 @@ correct_elm = nil
         Returns:
             Tuple of ``(before_marker_name, after_marker_name)``.
         """
-        element_name, offset = self.accelerator.ac_dipole_location
+        element_name = self.accelerator.ac_dipole_name
 
         before_marker = self.accelerator.acd_marker_name("before")
         after_marker = self.accelerator.acd_marker_name("after")
@@ -255,6 +255,9 @@ local seq_elm = loaded_sequence['{element_name}']
         """)
         element_pos = self.mad.recv()
         element_refpos, element_length = self.mad.recv()
+        logger.debug(
+            f"ACD element '{element_name}' position: {element_pos}, refpos: {element_refpos}, length: {element_length}"
+        )
         if element_refpos != "centre":
             raise ValueError(
                 "ACD marker insertion currently only supports centre reference"
@@ -265,17 +268,16 @@ local seq_elm = loaded_sequence['{element_name}']
 -- are not inside a thick body and can be used as valid range endpoints.
 -- loaded_sequence:replace recomputes surrounding drifts automatically.
 local seq_elm = loaded_sequence['{element_name}']
-local replaced = loaded_sequence:replace({{seq_elm {{ l = 0 }}}}, '{element_name}')
+local replaced = loaded_sequence:replace({{seq_elm {{ l = 0, at = py:recv() }}}}, '{element_name}')
 {self.py_name}:send(replaced and #replaced or 0)
-            """)
+            """).send(element_pos)
             if (n_replaced := self.mad.recv()) != 1:
                 raise ValueError(
                     f"Element replacement failed during ACD marker insertion, replaced {n_replaced} elements instead of 1"
                 )
 
-        kick_pos = float(element_pos) + float(offset)
-        start_pos = kick_pos - 1e-6
-        end_pos = kick_pos + 1e-6
+        start_pos = element_pos - 1e-9
+        end_pos = element_pos + 1e-9
 
         self.mad.send(f"""
 local marker in MAD.element
@@ -628,7 +630,7 @@ match {{
             drv_tunes: Driven tunes (qx_drv, qy_drv)
             offset: Offset from marker location (default: 0.0)
         """
-        install_point, offset = self.accelerator.ac_dipole_location
+        install_point = self.accelerator.ac_dipole_name
         logger.debug(
             f"Installing AC dipole at {install_point} with natural tunes {nat_tunes} "
             f"and driven tunes {drv_tunes}"
@@ -636,42 +638,47 @@ match {{
 
         # Get beta functions at AC marker location
         self.mad.send(f"""
-local tws = twiss{{sequence=loaded_sequence}}
-local betx = tws['{install_point}'].beta11
-local bety = tws['{install_point}'].beta22
-{self.py_name}:send({{betx, bety}}, true)
+acd_location = loaded_sequence:upos("{install_point}")
+{self.py_name}:send(acd_location, true)
 """)
-        betx, bety = self.mad.recv()
-
-        if betx is None or bety is None:
+        acd_location = self.mad.recv()
+        if acd_location is None:
             raise ValueError(
-                f"Could not retrieve beta functions at marker '{install_point}'"
+                f"Could not find position for AC dipole installation point: {install_point}"
             )
 
         # Install AC kickers
         self.mad.send(f"""
-local hackicker, vackicker in MAD.element
-loaded_sequence:install{{
-    hackicker "hackicker" {{
-        at = {offset},
-        from = "{install_point}",
-        nat_q = {nat_tunes[0]:.15e},
-        drv_q = {drv_tunes[0]:.15e},
-        ac_bet = {betx:.15e},
-    }},
-    vackicker "vackicker" {{
-        at = {offset},
-        from = "{install_point}",
-        nat_q = {nat_tunes[1]:.15e},
-        drv_q = {drv_tunes[1]:.15e},
-        ac_bet = {bety:.15e},
-    }}
-}}
+local marker in MAD.element
+-- Make the ACD thin with a marker just to get the beta functions at the correct location
+loaded_sequence:replace({{marker '__custom_marker__' {{at = acd_location}}}}, "{install_point}")
 """)
 
-        logger.debug(
-            f"AC dipole installed: betx={betx:.6f}, bety={bety:.6f} at {install_point} with offset {offset}"
-        )
+        self.mad.send(f"""
+local hackicker, vackicker in MAD.element
+
+! Do a twiss and replace the ac_bet values for the kickers
+local tws = twiss{{sequence=loaded_sequence}}
+local betx = tws['__custom_marker__'].beta11
+local bety = tws['__custom_marker__'].beta22
+loaded_sequence:install{{
+    hackicker "hackicker" {{
+        at = acd_location,
+        nat_q = {nat_tunes[0]:.15e},
+        drv_q = {drv_tunes[0]:.15e},
+        ac_bet = betx,
+    }},
+    vackicker "vackicker" {{
+        at = acd_location,
+        nat_q = {nat_tunes[1]:.15e},
+        drv_q = {drv_tunes[1]:.15e},
+        ac_bet = bety,
+    }}
+}}
+loaded_sequence:remove('__custom_marker__') -- Clean up the temporary marker
+        """)
+
+        logger.debug(f"AC dipole installed: at {install_point}, {acd_location:.6f} m")
 
     def __enter__(self) -> AcceleratorMadInterface:
         """Enter context manager."""

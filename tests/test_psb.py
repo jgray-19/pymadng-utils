@@ -16,7 +16,7 @@ def test_psb_infers_ring_and_defaults(seq_psb3: Path) -> None:
     assert accel.bpm_pattern == "^BR3%.BPM.*3$"
     assert accel.tune_variables == ("kBRQF", "kBRQD")
     assert accel.tune_integers == (4, 4)
-    assert accel.ac_dipole_location == ("BR3.DES3L1", 0.565 / 2)
+    assert accel.ac_dipole_name == "BR3.DES3L1"
     # assert accel.get_exciter_bpm() == ("BR3.BPM3L3", "BR3.BPM4L3")
     assert accel.kinetic_energy == pytest.approx(PSB_FLAT_BOTTOM_GEV)
     assert accel.energy == pytest.approx(PSB_FLAT_BOTTOM_GEV + PROTON_MASS_GEV)

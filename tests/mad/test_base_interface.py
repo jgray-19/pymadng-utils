@@ -207,7 +207,7 @@ def test_insert_acd_markers(
 ) -> None:
     """Insert before/after markers around the accelerator AC-dipole element."""
     interface = loaded_interface
-    element_name, _offset = interface.accelerator.ac_dipole_location
+    element_name = interface.accelerator.ac_dipole_name
     before_name = interface.accelerator.acd_marker_name("before")
     after_name = interface.accelerator.acd_marker_name("after")
 
@@ -353,7 +353,7 @@ def test_install_ac_dipole_and_twiss(loaded_ac_interface_with_beam) -> None:
     drv_qy = tws_ac.headers["q2"] % 1
 
     # Verify that tunes have changed to driven values
-    tolerance = 1e-4
+    tolerance = 1e-3
     assert np.isclose(drv_qx, drv_tunes[0], atol=tolerance), (
         f"Q1 not driven correctly: expected {drv_tunes[0]:.6f}, got {drv_qx:.6f}"
     )

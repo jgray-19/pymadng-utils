@@ -97,19 +97,9 @@ def get_marker_and_element_positions(
 ) -> tuple[int | float, int, int | float, int]:
     """Helper to get positions and indices of marker and element."""
     interface.mad.send(f"""
-local marker_pos, elm_pos, marker_idx, elm_idx
-for i, elm, s, ds in loaded_sequence:siter() do
-    if elm.name == "{marker_name}" then
-        marker_idx = i
-        marker_pos = s
-    end
-    if elm.name == "{element_name}" then
-        elm_idx = i
-        elm_pos = s
-    end
-end
-py:send(marker_pos)
-py:send(marker_idx)
-py:send(elm_pos)
-py:send(elm_idx)""")
+py:send(loaded_sequence:upos("{marker_name}"))
+py:send(loaded_sequence:index_of("{marker_name}"))
+py:send(loaded_sequence:upos("{element_name}"))
+py:send(loaded_sequence:index_of("{element_name}"))
+""")
     return _recv_n(interface.mad, 4)
