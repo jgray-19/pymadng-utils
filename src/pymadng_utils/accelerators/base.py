@@ -60,6 +60,13 @@ class Accelerator(ABC):
         """Return the AC-dipole exciter marker and the offset from the marker for installation."""
         pass
 
+    def acd_marker_name(self, side: str) -> str:
+        """Return a stable row name for the AC-dipole marker state."""
+        if side not in {"before", "after"}:
+            raise ValueError(f"side must be 'before' or 'after', got {side!r}")
+        marker_name, _offset = self.ac_dipole_location
+        return f"{marker_name}_{side}"
+
     # @property
     # @abstractmethod
     # def get_exciter_bpm(self) -> tuple[str, str]:

@@ -202,6 +202,54 @@ def test_make_element_thin_missing_element_raises(
         loaded_interface.make_element_thin("NOT_AN_ELEMENT")
 
 
+def test_insert_acd_markers(
+    loaded_interface: AcceleratorMadInterface,
+) -> None:
+    """Insert before/after markers around the accelerator AC-dipole element."""
+    interface = loaded_interface
+    element_name, _offset = interface.accelerator.ac_dipole_location
+    before_name = interface.accelerator.acd_marker_name("before")
+    after_name = interface.accelerator.acd_marker_name("after")
+
+    (
+        before_position_before,
+        before_index_before,
+        element_position_before,
+        element_index_before,
+    ) = get_marker_and_element_positions(interface, before_name, element_name)
+    after_position_before, after_index_before, _, _ = get_marker_and_element_positions(
+        interface, after_name, element_name
+    )
+
+    ret_before, ret_after = interface.insert_acd_markers()
+
+    (
+        before_position_after,
+        before_index_after,
+        element_position_after,
+        element_index_after,
+    ) = get_marker_and_element_positions(interface, before_name, element_name)
+    after_position_after, after_index_after, _, _ = get_marker_and_element_positions(
+        interface, after_name, element_name
+    )
+
+    assert before_position_before is None
+    assert before_index_before is None
+    assert after_position_before is None
+    assert after_index_before is None
+    assert ret_before == before_name
+    assert ret_after == after_name
+    assert before_index_after is not None
+    assert element_index_after is not None
+    assert after_index_after is not None
+    assert before_position_after < after_position_after
+    assert element_position_after == element_position_before
+    assert (
+        len({int(before_index_after), int(element_index_after), int(after_index_after)})
+        == 3
+    )
+
+
 def test_getset_variables(interface: AcceleratorMadInterface) -> None:
     """Test setting MAD variables."""
     interface.set_variables(**{"KQTL_1L1_B1": 1.2, "KQTL_1L2_B1": 2.3})

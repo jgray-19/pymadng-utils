@@ -180,7 +180,10 @@ class AcceleratorMadInterface:
             raise RuntimeError("Cycle failed - check MAD output for details") from e
 
     def make_element_thin(
-        self, element_name: str, marker_name: str | None = None
+        self,
+        element_name: str,
+        marker_name: str | None = None,
+        observe_after: bool = True,
     ) -> str:
         """
         Make an element thin by replacing it with a marker.
@@ -188,6 +191,7 @@ class AcceleratorMadInterface:
         Args:
             element_name: Name of the element to replace
             marker_name: Name of the new marker
+            observe_after: Whether to observe the new marker after replacement
 
         Returns:
             str: The name of the marker that replaces the original element.
@@ -219,8 +223,76 @@ correct_elm = nil
             raise ValueError(
                 f"Element replacement failed, replaced {n_replaced} elements instead of 1"
             )
-
+        if observe_after:
+            self.observe(marker_name, unobserve_first=False)
         return marker_name
+
+    def insert_acd_markers(self, element_name: str | None = None) -> tuple[str, str]:
+        """Insert thin markers immediately before and after the AC-dipole element.
+
+        Args:
+            element_name: Optional explicit element name. Defaults to the
+                accelerator's AC-dipole marker element.
+
+        Returns:
+            Tuple of ``(before_marker_name, after_marker_name)``.
+        """
+        element_name, offset = self.accelerator.ac_dipole_location
+
+        before_marker = self.accelerator.acd_marker_name("before")
+        after_marker = self.accelerator.acd_marker_name("after")
+
+        self.mad.send(f"""
+{self.py_name}:send(loaded_sequence['{element_name}'] ~= 0, true)
+        """)
+        if not bool(self.mad.recv()):
+            raise ValueError(f"Could not find element: {element_name}")
+
+        self.mad.send(f"""
+local seq_elm = loaded_sequence['{element_name}']
+{self.py_name}:send(loaded_sequence:upos(seq_elm), true)
+{self.py_name}:send({{seq_elm.refpos or (loaded_sequence.refer or "centre"), seq_elm.l}}, true)
+        """)
+        element_pos = self.mad.recv()
+        element_refpos, element_length = self.mad.recv()
+        if element_refpos != "centre":
+            raise ValueError(
+                "ACD marker insertion currently only supports centre reference"
+            )
+        if element_length > 0:
+            self.mad.send(f"""
+-- Replace the thick ACD element with a thin copy so the before/after markers
+-- are not inside a thick body and can be used as valid range endpoints.
+-- loaded_sequence:replace recomputes surrounding drifts automatically.
+local seq_elm = loaded_sequence['{element_name}']
+local replaced = loaded_sequence:replace({{seq_elm {{ l = 0 }}}}, '{element_name}')
+{self.py_name}:send(replaced and #replaced or 0)
+            """)
+            if (n_replaced := self.mad.recv()) != 1:
+                raise ValueError(
+                    f"Element replacement failed during ACD marker insertion, replaced {n_replaced} elements instead of 1"
+                )
+
+        kick_pos = float(element_pos) + float(offset)
+        start_pos = kick_pos - 1e-6
+        end_pos = kick_pos + 1e-6
+
+        self.mad.send(f"""
+local marker in MAD.element
+loaded_sequence:install{{
+    marker "{before_marker}" {{ at = {start_pos:.15e} }},
+    marker "{after_marker}" {{ at = {end_pos:.15e} }},
+}}
+MADX['{before_marker}'] = loaded_sequence['{before_marker}']
+MADX['{after_marker}'] = loaded_sequence['{after_marker}']
+{self.py_name}:send({{MADX['{before_marker}'] ~= 0, MADX['{after_marker}'] ~= 0}}, true)
+correct_elm = nil
+        """)
+        before_exists, after_exists = self.mad.recv()
+        if not bool(before_exists) or not bool(after_exists):
+            raise ValueError(f"ACD marker insertion failed for element {element_name}")
+
+        return before_marker, after_marker
 
     def run_twiss(self, **twiss_kwargs) -> pd.DataFrame:
         """

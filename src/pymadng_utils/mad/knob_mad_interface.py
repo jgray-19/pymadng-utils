@@ -52,9 +52,14 @@ class KnobMadInterface(AcceleratorMadInterface):
             else:
                 logger.warning(f"Element {ename} has unknown kind '{kind}'")
 
-    def observe_bpms(self, bpm_pattern: str, bad_bpms: list[str] | None = None) -> None:
+    def observe_bpms(
+        self,
+        bpm_pattern: str,
+        bad_bpms: list[str] | None = None,
+        unobserve_first: bool = True,
+    ) -> None:
         """Set up the MAD-NG session to observe BPMs."""
-        self.observe(bpm_pattern)
+        self.observe(bpm_pattern, unobserve_first)
         logger.debug(f"Set up observation for BPMs matching pattern: {bpm_pattern}")
         if bad_bpms:
             self.unobserve_elements(bad_bpms)
