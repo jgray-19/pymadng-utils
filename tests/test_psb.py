@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -10,6 +10,10 @@ from pymadng_utils.accelerators import (
     PSB_FLAT_BOTTOM_GEV,
     Accelerator,
 )
+from pymadng_utils.physics import beta_from_energy
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class DummyAccelerator(Accelerator):
@@ -43,6 +47,7 @@ def test_psb_infers_ring_and_defaults(seq_psb3: Path) -> None:
     # assert accel.get_exciter_bpm() == ("BR3.BPM3L3", "BR3.BPM4L3")
     assert accel.kinetic_energy == pytest.approx(PSB_FLAT_BOTTOM_GEV)
     assert accel.energy == pytest.approx(PSB_FLAT_BOTTOM_GEV + PROTON_MASS_GEV)
+    assert accel.beta == pytest.approx(beta_from_energy(accel.energy, "proton"))
 
 
 def test_psb_requires_inferable_or_explicit_ring(tmp_path: Path) -> None:
@@ -75,12 +80,20 @@ def test_accelerator_repr_and_str_default_behaviour(tmp_path: Path) -> None:
         "DummyAccelerator("
         f"sequence_file={sequence_file!r}, "
         "kinetic_energy=1.25, "
-        "energy=2.1882720813, "
-        "bpm_pattern='^BPM', "
-        "particle='proton'"
+        "particle='proton', "
+        "energy=2.1882720881599997, "
+        "beta=0.903412239922737, "
+        "bpm_pattern='^BPM'"
         ")"
     )
     assert str(accel) == (
         f"DummyAccelerator(seq_name=dummy, particle=proton, "
         f"kinetic_energy=1.25 GeV, sequence_file={sequence_file})"
     )
+
+
+def test_accelerator_uses_beta_for_dp_pt_conversions(tmp_path: Path) -> None:
+    accel = DummyAccelerator(sequence_file=tmp_path / "dummy.seq", kinetic_energy=1.25)
+    dp = 0.015
+
+    assert accel.pt2dp(accel.dp2pt(dp)) == pytest.approx(dp)

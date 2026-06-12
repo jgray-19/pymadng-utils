@@ -6,14 +6,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any  # noqa: F401 — used in __init__ signature
 
-PROTON_MASS_GEV = 0.9382720813
-ELECTRON_MASS_GEV = 5.109989461e-4
-
-PARTICLE_MASSES_GEV = {
-    "proton": PROTON_MASS_GEV,
-    "electron": ELECTRON_MASS_GEV,
-    "positron": ELECTRON_MASS_GEV,
-}
+from pymadng_utils.physics import beta_from_energy, dp2pt, particle_mass, pt2dp
 
 
 class Accelerator(ABC):
@@ -36,12 +29,10 @@ class Accelerator(ABC):
         super().__init__()
         self.sequence_file = Path(sequence_file)
         self.kinetic_energy = float(kinetic_energy)
-        try:
-            self.energy = self.kinetic_energy + PARTICLE_MASSES_GEV[particle]
-        except KeyError:
-            raise ValueError(f"Unsupported particle: {particle}")
-        self.bpm_pattern = str(bpm_pattern)
         self.particle = str(particle)
+        self.energy = self.kinetic_energy + particle_mass(self.particle)
+        self.beta = beta_from_energy(self.energy, self.particle)
+        self.bpm_pattern = str(bpm_pattern)
 
     def __repr__(self) -> str:
         """Return a developer-facing representation of public accelerator state."""
@@ -60,6 +51,14 @@ class Accelerator(ABC):
             f"kinetic_energy={self.kinetic_energy:g} GeV, "
             f"sequence_file={self.sequence_file})"
         )
+
+    def dp2pt(self, dp: float) -> float:
+        """Convert relative momentum deviation ``dp/p`` to MAD-NG ``pt``."""
+        return dp2pt(dp, self.beta)
+
+    def pt2dp(self, pt: float) -> float:
+        """Convert MAD-NG ``pt`` to relative momentum deviation ``dp/p``."""
+        return pt2dp(pt, self.beta)
 
     @property
     @abstractmethod

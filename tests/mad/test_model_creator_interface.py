@@ -62,6 +62,16 @@ def test_model_creator_init_loads_sequence_and_beam(
     assert model_interface.mad.loaded_sequence.beam.energy == pytest.approx(6800.0 + 0.9382720813)
 
 
+def test_model_creator_repr_and_str_use_default_interface_behaviour(
+    model_interface: ModelCreatorMadInterface,
+) -> None:
+    assert (
+        repr(model_interface)
+        == "ModelCreatorMadInterface(seq_name='lhcb1', py_name='py')"
+    )
+    assert str(model_interface) == "ModelCreatorMadInterface(lhcb1)"
+
+
 def test_get_current_tunes_reads_real_twiss(
     model_interface: ModelCreatorMadInterface,
 ) -> None:

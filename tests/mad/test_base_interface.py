@@ -15,6 +15,7 @@ import pytest
 
 from pymadng_utils.accelerators import LHC
 from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
+from pymadng_utils.physics import beta_from_energy
 from tests.mad.helpers import (
     check_beam_setup,
     check_element_observations,
@@ -50,6 +51,11 @@ def test_init(seq_b1: Path) -> None:
     interface.mad.send("a = 2")
     assert interface.mad.a == 2
     cleanup_interface(interface)
+
+
+def test_repr_and_str_are_concise(interface: AcceleratorMadInterface) -> None:
+    assert repr(interface) == "AcceleratorMadInterface(seq_name='lhcb1', py_name='py')"
+    assert str(interface) == "AcceleratorMadInterface(lhcb1)"
 
 
 def test_load_sequence(interface: AcceleratorMadInterface) -> None:
@@ -91,6 +97,31 @@ def test_load_sequence_bad_file_raises(tmp_path: Path) -> None:
 def test_setup_beam(loaded_interface: AcceleratorMadInterface) -> None:
     """Test beam parameters from the accelerator descriptor are applied."""
     check_beam_setup(loaded_interface, particle="proton", kinetic_energy=6800.0)
+
+
+def test_beta_matches_python_and_mad_ng_calculations(
+    loaded_interface: AcceleratorMadInterface,
+) -> None:
+    """The accelerator beta and MAD-NG beam beta should agree."""
+    accelerator = loaded_interface.accelerator
+    expected_beta = beta_from_energy(accelerator.energy, accelerator.particle)
+    mad_ng_beta = loaded_interface.mad.loaded_sequence.beam.beta
+
+    assert accelerator.beta == pytest.approx(expected_beta)
+    assert loaded_interface.beta == pytest.approx(mad_ng_beta)
+    assert loaded_interface.beta == pytest.approx(accelerator.beta)
+
+
+def test_interface_and_accelerator_use_matching_beta_for_dp_pt(
+    loaded_interface: AcceleratorMadInterface,
+) -> None:
+    """Both conversion paths should use equivalent beta values."""
+    dp = 0.015
+
+    assert loaded_interface.dp2pt(dp) == pytest.approx(
+        loaded_interface.accelerator.dp2pt(dp)
+    )
+    assert loaded_interface.pt2dp(loaded_interface.dp2pt(dp)) == pytest.approx(dp)
 
 
 @pytest.mark.parametrize(

@@ -18,6 +18,7 @@ import numpy as np
 from pymadng import MAD
 
 from pymadng_utils.config import SHUSHING_SCRIPT
+from pymadng_utils.physics import dp2pt, pt2dp
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -62,6 +63,27 @@ class AcceleratorMadInterface:
 
         # Load the default sequence and set up the beam immediately, as these are common to all workflows.
         self.setup_sequence()
+        self.beta: float = self.mad.loaded_sequence.beam.beta
+
+    def __repr__(self) -> str:
+        """Return a concise developer-facing interface representation."""
+        return (
+            f"{type(self).__name__}("
+            f"seq_name={self.accelerator.seq_name!r}, "
+            f"py_name={self.py_name!r})"
+        )
+
+    def __str__(self) -> str:
+        """Return a concise human-readable interface summary."""
+        return f"{type(self).__name__}({self.accelerator.seq_name})"
+
+    def dp2pt(self, dp: float) -> float:
+        """Convert relative momentum deviation ``dp/p`` to MAD-NG ``pt`` using the loaded beam."""
+        return dp2pt(dp, self.beta)
+
+    def pt2dp(self, pt: float) -> float:
+        """Convert MAD-NG ``pt`` to relative momentum deviation ``dp/p`` using the loaded beam."""
+        return pt2dp(pt, self.beta)
 
     def load_sequence(self) -> None:
         """
@@ -320,6 +342,10 @@ correct_elm = nil
             raise RuntimeError("Twiss failed - check MAD output for details") from e
 
         df = self.mad.tws.to_df()
+        headers = getattr(df, "headers", None)
+        if isinstance(headers, dict):
+            headers["particle"] = self.accelerator.particle
+            headers["energy"] = self.accelerator.energy
         if "name" in df.columns:
             df.set_index("name", inplace=True)
         return df
