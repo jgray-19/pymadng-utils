@@ -4,7 +4,30 @@ from pathlib import Path
 
 import pytest
 
-from pymadng_utils.accelerators import PROTON_MASS_GEV, PSB, PSB_FLAT_BOTTOM_GEV
+from pymadng_utils.accelerators import (
+    PROTON_MASS_GEV,
+    PSB,
+    PSB_FLAT_BOTTOM_GEV,
+    Accelerator,
+)
+
+
+class DummyAccelerator(Accelerator):
+    @property
+    def seq_name(self) -> str:
+        return "dummy"
+
+    @property
+    def ac_dipole_name(self) -> str:
+        return "dummy.acd"
+
+    @property
+    def tune_variables(self) -> tuple[str, str]:
+        return "qx", "qy"
+
+    @property
+    def tune_integers(self) -> tuple[int, int]:
+        return 1, 2
 
 
 def test_psb_infers_ring_and_defaults(seq_psb3: Path) -> None:
@@ -38,3 +61,26 @@ def test_psb_infer_monitor_plane() -> None:
 
     with pytest.raises(ValueError, match="Unsupported PSB monitor name"):
         PSB.infer_monitor_plane("BR3.UNKNOWN")
+
+
+def test_accelerator_repr_and_str_default_behaviour(tmp_path: Path) -> None:
+    sequence_file = tmp_path / "dummy.seq"
+    accel = DummyAccelerator(
+        sequence_file=sequence_file,
+        kinetic_energy=1.25,
+        bpm_pattern="^BPM",
+    )
+
+    assert repr(accel) == (
+        "DummyAccelerator("
+        f"sequence_file={sequence_file!r}, "
+        "kinetic_energy=1.25, "
+        "energy=2.1882720813, "
+        "bpm_pattern='^BPM', "
+        "particle='proton'"
+        ")"
+    )
+    assert str(accel) == (
+        f"DummyAccelerator(seq_name=dummy, particle=proton, "
+        f"kinetic_energy=1.25 GeV, sequence_file={sequence_file})"
+    )

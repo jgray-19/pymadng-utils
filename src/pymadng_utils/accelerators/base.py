@@ -16,7 +16,6 @@ PARTICLE_MASSES_GEV = {
 }
 
 
-
 class Accelerator(ABC):
     """Small accelerator descriptor modelled on ``aba_optimiser``.
 
@@ -43,6 +42,24 @@ class Accelerator(ABC):
             raise ValueError(f"Unsupported particle: {particle}")
         self.bpm_pattern = str(bpm_pattern)
         self.particle = str(particle)
+
+    def __repr__(self) -> str:
+        """Return a developer-facing representation of public accelerator state."""
+        fields = ", ".join(
+            f"{name}={value!r}"
+            for name, value in vars(self).items()
+            if not name.startswith("_")
+        )
+        return f"{type(self).__name__}({fields})"
+
+    def __str__(self) -> str:
+        """Return a concise human-readable accelerator summary."""
+        return (
+            f"{type(self).__name__}(seq_name={self.seq_name}, "
+            f"particle={self.particle}, "
+            f"kinetic_energy={self.kinetic_energy:g} GeV, "
+            f"sequence_file={self.sequence_file})"
+        )
 
     @property
     @abstractmethod
