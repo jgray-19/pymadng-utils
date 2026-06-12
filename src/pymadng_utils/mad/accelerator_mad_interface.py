@@ -268,7 +268,7 @@ local seq_elm = loaded_sequence['{element_name}']
 -- are not inside a thick body and can be used as valid range endpoints.
 -- loaded_sequence:replace recomputes surrounding drifts automatically.
 local seq_elm = loaded_sequence['{element_name}']
-local replaced = loaded_sequence:replace({{seq_elm {{ l = 0, at = py:recv() }}}}, '{element_name}')
+local replaced = loaded_sequence:replace({{seq_elm {{ l = 0, at = {self.py_name}:recv() }}}}, '{element_name}')
 {self.py_name}:send(replaced and #replaced or 0)
             """).send(element_pos)
             if (n_replaced := self.mad.recv()) != 1:
