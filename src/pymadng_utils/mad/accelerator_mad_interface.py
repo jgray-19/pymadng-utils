@@ -251,8 +251,7 @@ correct_elm = MADX['{element_name}']
                 "collapsing a bending/focusing element to zero length would change the optics."
             )
         self.mad.send(f"""
-local seq_elm = loaded_sequence['{element_name}']:copy()
-local new_elm = seq_elm '{marker_name}' {{ l = 0, at = loaded_sequence:upos(seq_elm) }}
+local new_elm = correct_elm '{marker_name}' {{ l = 0, at = loaded_sequence:upos(correct_elm) }}
 local replaced = loaded_sequence:replace({{new_elm}}, '{element_name}')
 MADX['{marker_name}'] = new_elm ! Replace in the madx environment for later reference
 {self.py_name}:send(replaced and #replaced or 0)
