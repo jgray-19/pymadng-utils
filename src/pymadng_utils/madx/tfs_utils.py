@@ -41,13 +41,13 @@ def convert_tfs_to_madx(tfs_df: pd.DataFrame, remove_drifts=True) -> pd.DataFram
     # Make the columns all upper case for consistency
     tfs_df.columns = [col.upper() for col in tfs_df.columns]
 
-    # Change MU1 and MU2 from MUX and MUY column names
-    tfs_df.rename(columns={"MU1": "MUX", "MU2": "MUY"}, inplace=True)
-
-    # Change disp1 and disp3 to DX and DY
-    # tfs_df.rename(
-    #     columns={"DISP1": "DX", "DISP2": "DPX", "DISP3": "DY", "DISP4": "DPY"}, inplace=True
-    # )
+    # Change MU1 and MU2 to MUX and MUY column names. If MUX/MUY already exist
+    # (e.g. a hybrid xsuite twiss carrying both 'mux'/'muy' and 'mu1'/'mu2'),
+    # keep them and drop MU1/MU2 to avoid duplicate columns; otherwise rename.
+    if "MUX" in tfs_df.columns:
+        tfs_df = tfs_df.drop(columns=["MU1", "MU2"])
+    else:
+        tfs_df = tfs_df.rename(columns={"MU1": "MUX", "MU2": "MUY"})
 
     # Renumber drift elements consecutively
     if remove_drifts:

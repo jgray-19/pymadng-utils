@@ -208,7 +208,17 @@ class AcceleratorMadInterface:
         observe_after: bool = True,
     ) -> str:
         """
-        Make an element thin by replacing it with a marker.
+        Make an element thin by replacing it with a zero-length copy of itself.
+
+        The replacement inherits from the original element (preserving its kind
+        and attributes) but with ``l = 0`` and ``at`` pinned to the original
+        element's centre position, so the optics at the thin element match those
+        at the centre of the thick original.
+
+        Thinning is only permitted when the element does not bend or focus the
+        beam, i.e. ``k0``, ``k1`` and ``k2`` are all zero (or nil). Collapsing a
+        focusing/bending element to zero length would silently drop its effect on
+        the optics, so that case is rejected.
 
         Args:
             element_name: Name of the element to replace
@@ -224,18 +234,25 @@ class AcceleratorMadInterface:
         self.mad.send(f"""
 correct_elm = MADX['{element_name}']
 {self.py_name}:send(correct_elm)
-{self.py_name}:send({{correct_elm.refpos or (loaded_sequence.refer or "centre"), correct_elm.l}}, true)
+{self.py_name}:send({{correct_elm.k0 or 0, correct_elm.k1 or 0, correct_elm.k2 or 0}}, true)
         """)
         elm = self.mad.recv("correct_elm")
-        details = self.mad.recv()
+        k0, k1, k2 = self.mad.recv()
         if elm == 0:
             raise ValueError(f"Could not find element: {element_name}")
-        if details[0] != "centre" and details[1] > 0:
+        nonzero = {
+            name: value
+            for name, value in (("k0", k0), ("k1", k1), ("k2", k2))
+            if abs(float(value)) > 0
+        }
+        if nonzero:
             raise ValueError(
-                "Replacing markers currently not supported with non-centre reference or non-zero length"
+                f"Refusing to thin '{element_name}': it has non-zero {nonzero}; "
+                "collapsing a bending/focusing element to zero length would change the optics."
             )
         self.mad.send(f"""
-local new_elm = MAD.element[loaded_sequence['{element_name}'].kind] ('{marker_name}') {{ at=loaded_sequence:upos(correct_elm) }}
+local seq_elm = loaded_sequence['{element_name}']:copy()
+local new_elm = seq_elm '{marker_name}' {{ l = 0, at = loaded_sequence:upos(seq_elm) }}
 local replaced = loaded_sequence:replace({{new_elm}}, '{element_name}')
 MADX['{marker_name}'] = new_elm ! Replace in the madx environment for later reference
 {self.py_name}:send(replaced and #replaced or 0)
