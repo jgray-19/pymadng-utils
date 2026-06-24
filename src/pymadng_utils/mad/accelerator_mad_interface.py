@@ -148,6 +148,29 @@ class AcceleratorMadInterface:
             f"loaded_sequence:select(__observed_flag__, {{pattern='{pattern}'}})"
         )
 
+    def observe_element(self, element_name: str, unobserve_first: bool = False) -> None:
+        """Observe a single element matched by its exact name.
+
+        Unlike :meth:`observe`, which treats its argument as a Lua pattern, this
+        anchors (``^``...``$``) and escapes the name so it matches only that
+        element. Observing a bare name such as ``BPH.13008`` would otherwise be an
+        unanchored Lua pattern in which ``.`` is a wildcard, so it also selects any
+        neighbour whose name contains it as a substring (e.g. the centre-reference
+        marker ``OMC_MARKER_BPH.13008``), corrupting the observed-BPM count.
+        """
+        logger.debug(f"Observing exact element: {element_name}")
+        if unobserve_first:
+            self.unobserve_all_elements()
+        # Escape Lua pattern magic characters and anchor both ends, all in Lua so
+        # the exact name (not a pattern) drives the selection.
+        self.mad.send(
+            f"""
+local _exact = '{element_name}'
+local _pattern = '^' .. _exact:gsub('[%(%)%.%%%+%-%*%?%[%]%^%$]', '%%%1') .. '$'
+loaded_sequence:select(__observed_flag__, {{pattern=_pattern}})
+"""
+        )
+
     def unobserve(self, pattern: str | None = None) -> None:
         """
         Remove observation for elements matching a pattern.
@@ -262,18 +285,20 @@ correct_elm = nil
                 f"Element replacement failed, replaced {n_replaced} elements instead of 1"
             )
         if observe_after:
-            self.observe(marker_name, unobserve_first=False)
+            self.observe_element(marker_name)
         return marker_name
 
     def insert_acd_markers(self, element_name: str | None = None) -> tuple[str, str]:
-        """Insert thin markers immediately before and after the AC-dipole element.
+        """Insert thin monitor endpoints immediately before and after the AC-dipole element.
 
         Args:
             element_name: Optional explicit element name. Defaults to the
                 accelerator's AC-dipole marker element.
 
         Returns:
-            Tuple of ``(before_marker_name, after_marker_name)``.
+            Tuple of ``(before_marker_name, after_marker_name)``. The historical
+            names are kept, but the installed elements are monitors so MAD-NG
+            monitor callbacks include them in tracking output.
         """
         element_name = self.accelerator.ac_dipole_name
 
@@ -318,10 +343,10 @@ local replaced = loaded_sequence:replace({{seq_elm {{ l = 0, at = {self.py_name}
         end_pos = element_pos + 1e-9
 
         self.mad.send(f"""
-local marker in MAD.element
+local monitor in MAD.element
 loaded_sequence:install{{
-    marker "{before_marker}" {{ at = {start_pos:.15e} }},
-    marker "{after_marker}" {{ at = {end_pos:.15e} }},
+    monitor "{before_marker}" {{ at = {start_pos:.15e} }},
+    monitor "{after_marker}" {{ at = {end_pos:.15e} }},
 }}
 MADX['{before_marker}'] = loaded_sequence['{before_marker}']
 MADX['{after_marker}'] = loaded_sequence['{after_marker}']
