@@ -93,7 +93,7 @@ class AcceleratorMadInterface:
         file_path = Path(self.accelerator.sequence_file).resolve()
         if not file_path.exists():
             raise FileNotFoundError(f"Sequence file not found: {file_path}")
-        # self.mad.send("shush()")
+        self.mad.send("shush()")
 
         logger.debug("Caching MAD translation for faster subsequent loads")
         mad_cache_path = file_path.with_suffix(".mad")
@@ -105,7 +105,7 @@ class AcceleratorMadInterface:
             )
         self.mad.send(f"loaded_sequence = MADX.{self.accelerator.seq_name}")
         self.mad["SEQ_NAME"] = self.accelerator.seq_name
-        # self.mad.send("unshush()")
+        self.mad.send("unshush()")
 
     def setup_beam(self) -> None:
         """
