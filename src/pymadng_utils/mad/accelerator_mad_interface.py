@@ -196,12 +196,12 @@ loaded_sequence:select(__observed_flag__, {{pattern=_pattern}})
             self.unobserve(elm)
 
     def observe_elements(
-        self, patterns: list[str], unobserve_first: bool = True
+        self, element_names: list[str], unobserve_first: bool = True
     ) -> None:
         if unobserve_first:
             self.unobserve_all_elements()
-        for pattern in patterns:
-            self.observe(pattern, unobserve_first=False)
+        for pattern in element_names:
+            self.observe_element(pattern, unobserve_first=False)
 
     def cycle_sequence(self, marker_name: str | None = None) -> None:
         """

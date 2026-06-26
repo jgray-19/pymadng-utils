@@ -83,6 +83,14 @@ class Accelerator(ABC):
         marker_name = self.ac_dipole_name
         return f"{marker_name}_{side}"
 
+    def kicker_marker_name(self, kicker_name: str) -> str:
+        """Return the measured initial-condition marker name for kicker tracking."""
+        return kicker_name
+
+    def kicker_cycle_marker_name(self, kicker_name: str) -> str:
+        """Return the unobserved centre marker used to cycle kicker-mode tracking."""
+        return f"{kicker_name}_centre"
+
     # @property
     # @abstractmethod
     # def get_exciter_bpm(self) -> tuple[str, str]:
