@@ -1,6 +1,7 @@
 # pymadng-utils
 
 [![codecov](https://codecov.io/gh/jgray-19/pymadng-utils/graph/badge.svg?token=L1EV8MDM6M)](https://codecov.io/gh/jgray-19/pymadng-utils)
+[![Coverage](https://github.com/jgray-19/pymadng-utils/actions/workflows/coverage.yml/badge.svg)](https://github.com/jgray-19/pymadng-utils/actions/workflows/coverage.yml)
 
 `pymadng-utils` provides thin, workflow-oriented helpers around MAD-NG, MAD-X, and OMC3 model creation. The package is aimed at two concrete use cases:
 
