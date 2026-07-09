@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import contextlib
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 import tfs
@@ -11,6 +11,9 @@ from pymadng_utils.accelerators import PSB
 from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
 from pymadng_utils.madx.make_sequence import make_madx_sequence
 from pymadng_utils.model_creator.madng_utils import update_model_with_madng
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 PSB_NAT_TUNES = (0.17, 0.225)
 PSB_DRV_TUNES = (0.162, 0.232)
