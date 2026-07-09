@@ -8,7 +8,6 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import tfs
 from cpymad.madx import Madx
 from omc3.model.accelerators.lhc import Lhc
 from omc3.model.accelerators.sps import Sps
@@ -126,61 +125,26 @@ def _extract_psb_script(job_text: str) -> str:
     return job_text[: match.end()] + "\n"
 
 
-def _has_acd(model_dir: Path) -> bool:
-    """Determine whether the PSB model should retain AC-dipole elements."""
-    return (model_dir / "twiss_ac.dat").exists()
+def _strip_psb_ac_maps(seq_path: Path) -> None:
+    """Remove PSB AC-map content from the saved sequence.
 
-
-def _rewrite_psb_ac_maps_to_acdipoles(seq_path: Path, model_dir: Path) -> None:
-    """Adjust PSB AC-map content in the saved sequence.
-
-    For ACD-off inputs, remove the thin map definitions and placements entirely.
-    For ACD-on inputs, replace the MAD-X matrix elements with MAD-NG-native
-    ``hackicker``/``vackicker`` elements so the saved sequence can be loaded by
-    :class:`AbaMadInterface` while preserving the driven tunes.
+    The nominal MAD-X job installs thin ``hacmap``/``vacmap`` matrix elements
+    for AC-dipole excitation. These are stripped here so the saved sequence is
+    clean; the model creator installs the MAD-NG-native AC dipole itself when
+    driven tunes are requested.
     """
     seq_text = seq_path.read_text()
 
-    twiss = tfs.read(model_dir / "twiss.dat", index="NAME")
-    twiss_ac = (
-        tfs.read(model_dir / "twiss_ac.dat", index="NAME")
-        if _has_acd(model_dir)
-        else twiss
-    )
-    twiss_elements = tfs.read(model_dir / "twiss_elements.dat", index="NAME")
-
-    for coeff_pat, elm, nat_q, drv_q, bet in [
-        (
-            r"(?im)^\s*hacmap21\s*=\s*[^;]+;\s*$",
-            "hacmap",
-            twiss.headers["Q1"],
-            twiss_ac.headers["Q1"],
-            twiss_elements.loc["HACMAP", "BETX"],
-        ),
-        (
-            r"(?im)^\s*vacmap43\s*=\s*[^;]+;\s*$",
-            "vacmap",
-            twiss.headers["Q2"],
-            twiss_ac.headers["Q2"],
-            twiss_elements.loc["VACMAP", "BETY"],
-        ),
+    for coeff_pat, elm in [
+        (r"(?im)^\s*hacmap21\s*=\s*[^;]+;\s*$", "hacmap"),
+        (r"(?im)^\s*vacmap43\s*=\s*[^;]+;\s*$", "vacmap"),
     ]:
+        # Coefficient assignment, matrix definition, and any placement.
         seq_text = re.sub(coeff_pat, "", seq_text)
-        kicker = elm.replace("map", "kicker")
-        mat_pat = rf"(?im)^\s*{elm}\s*:\s*matrix\s*,\s*l:?=\s*[^;]+;\s*$"
-        if nat_q == drv_q:
-            # No ACD: remove the definition and any placement in the sequence body.
-            seq_text = re.sub(mat_pat, "", seq_text)
-            seq_text = re.sub(rf"(?im)^\s*{elm}\s*,\s*at\s*=[^;]+;\s*$", "", seq_text)
-        else:
-            replacement = (
-                f"{elm}: {kicker},"
-                f"l:={0.0:.16e},"
-                f"nat_q:={nat_q:.16e},"
-                f"drv_q:={drv_q:.16e},"
-                f"ac_bet:={bet:.16e};"
-            )
-            seq_text = re.sub(mat_pat, replacement, seq_text)
+        seq_text = re.sub(
+            rf"(?im)^\s*{elm}\s*:\s*matrix\s*,\s*l:?=\s*[^;]+;\s*$", "", seq_text
+        )
+        seq_text = re.sub(rf"(?im)^\s*{elm}\s*,\s*at\s*=[^;]+;\s*$", "", seq_text)
 
     seq_path.write_text(seq_text)
 
@@ -234,7 +198,7 @@ def _make_psb_sequence(
         shutil.copy2(saved_seq, seq_path)
         saved_seq.unlink(missing_ok=True)
 
-    _rewrite_psb_ac_maps_to_acdipoles(seq_path, model_dir)
+    _strip_psb_ac_maps(seq_path)
     return seq_path, ring
 
 

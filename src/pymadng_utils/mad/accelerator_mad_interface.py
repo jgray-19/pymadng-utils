@@ -339,8 +339,8 @@ local replaced = loaded_sequence:replace({{seq_elm {{ l = 0, at = {self.py_name}
                     f"Element replacement failed during ACD marker insertion, replaced {n_replaced} elements instead of 1"
                 )
 
-        start_pos = element_pos - 1e-9
-        end_pos = element_pos + 1e-9
+        start_pos = element_pos - 1e-10
+        end_pos = element_pos + 1e-10
 
         self.mad.send(f"""
 local monitor in MAD.element
@@ -383,10 +383,8 @@ correct_elm = nil
             raise RuntimeError("Twiss failed - check MAD output for details") from e
 
         df = self.mad.tws.to_df()
-        headers = getattr(df, "headers", None)
-        if isinstance(headers, dict):
-            headers["particle"] = self.accelerator.particle
-            headers["energy"] = self.accelerator.energy
+        df.headers["particle"] = self.accelerator.particle
+        df.headers["energy"] = self.accelerator.energy
         if "name" in df.columns:
             df.set_index("name", inplace=True)
         return df
@@ -523,7 +521,13 @@ local l, dknl, {attr} in loaded_sequence['{element_name}']
                 if attr in _DKNL_STRENGTH_ATTRS:
                     self._set_dknl_component(str(elm.name), attr, delta)
                     knob_attr = f"d{attr}l" if not attr.startswith("d") else attr
-                    magnet_strengths[f"{elm.name}.{knob_attr}"] = delta
+                    # ``_set_dknl_component`` writes the *integrated* perturbation
+                    # (delta * length) into dknl, and the ``dk*l`` knob name is
+                    # itself integrated, so record the integrated value. This keeps
+                    # the returned dict consistent with what ``get_magnet_strengths``
+                    # reads back for the same knob (which returns dknl[i] directly).
+                    length = float(elm.l)
+                    magnet_strengths[f"{elm.name}.{knob_attr}"] = delta * length
                 else:
                     elm[attr] = strength_after
                     magnet_strengths[f"{elm.name}.{attr}"] = strength_after
@@ -683,6 +687,7 @@ match {{
         self,
         nat_tunes: tuple[float, float],
         drv_tunes: tuple[float, float],
+        deltap: float = 0.0,
     ) -> None:
         """
         Install AC dipole kickers at the location given by the accelerator's AC dipole marker, with specified natural and driven tunes.
@@ -695,6 +700,7 @@ match {{
             marker_name: Name of marker where AC dipole will be installed
             nat_tunes: Natural tunes (qx, qy)
             drv_tunes: Driven tunes (qx_drv, qy_drv)
+            deltap: Relative momentum deviation for the marker beta functions.
             offset: Offset from marker location (default: 0.0)
         """
         install_point = self.accelerator.ac_dipole_name
@@ -725,7 +731,7 @@ loaded_sequence:replace({{marker '__custom_marker__' {{at = acd_location}}}}, "{
 local hackicker, vackicker in MAD.element
 
 ! Do a twiss and replace the ac_bet values for the kickers
-local tws = twiss{{sequence=loaded_sequence}}
+local tws = twiss{{sequence=loaded_sequence, deltap={deltap:.16e}}}
 local betx = tws['__custom_marker__'].beta11
 local bety = tws['__custom_marker__'].beta22
 loaded_sequence:install{{
