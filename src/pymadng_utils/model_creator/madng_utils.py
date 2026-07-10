@@ -22,6 +22,7 @@ def update_model_with_madng(
     *,
     tunes: list[float] | None = None,
     drv_tunes: list[float] | None = None,
+    deltap: float = 0.0,
     convert_to_madx: bool = True,
 ) -> None:
     """
@@ -38,11 +39,12 @@ def update_model_with_madng(
         model_dir: Directory where model files are located and will be updated
         tunes: Target fractional tunes [Q1, Q2] to match in the model
         drv_tunes: Optional target driven tunes [Q1, Q2] for tracking mode
+        deltap: Relative momentum deviation used for tune matching and exported twiss tables
         convert_to_madx: Whether to convert TFS files to MAD-X format after export
     """
     LOGGER.info(f"\n{'=' * 60}")
     LOGGER.info(f"Updating model for {accelerator.seq_name} with MAD-NG")
-    LOGGER.info(f"Natural tunes: {tunes}, Driven tunes: {drv_tunes}")
+    LOGGER.info(f"Natural tunes: {tunes}, Driven tunes: {drv_tunes}, deltap: {deltap}")
     LOGGER.info(f"{'=' * 60}\n")
 
     with ModelCreatorMadInterface(
@@ -50,6 +52,7 @@ def update_model_with_madng(
         model_dir=model_dir,
         tunes=tunes,
         drv_tunes=drv_tunes,
+        deltap=deltap,
     ) as mad_interface:
         mad_interface.compute_and_export_twiss_tables(convert_to_madx)
 

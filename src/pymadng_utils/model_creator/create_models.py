@@ -25,34 +25,6 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def create_lhc_models(
-    beams: list[int],
-    data_dir: pathlib.Path,
-    year: str,
-    *,
-    nat_tunes: list[float],
-    optics_label: str,
-    fetch: str = "afs",
-    path: str | None = None,
-    drv_tunes: list[float] | None = None,
-    energy: float = 6800.0,
-    modifiers: str | list[str] | None = None,
-) -> None:
-    """Create multiple LHC models with a shared configuration."""
-    for beam in beams:
-        model_dir = data_dir / f"model_b{beam}__t{nat_tunes[0]}_{nat_tunes[1]}_{optics_label}"
-        create_lhc_model(
-            beam=beam,
-            output_dir=model_dir,
-            year=year,
-            fetch=fetch,
-            path=path,
-            nat_tunes=nat_tunes,
-            drv_tunes=drv_tunes,
-            energy=energy,
-            modifiers=modifiers,
-        )
-
 def create_lhc_model(
     beam: int,
     output_dir: pathlib.Path,
@@ -151,39 +123,12 @@ def create_lhc_model(
 
     # Step 3: Update with MAD-NG
     LOGGER.info("Step 3: Updating model with MAD-NG...")
-    update_model_with_madng(accelerator, output_dir, tunes=nat_tunes, drv_tunes=drv_tunes)
+    update_model_with_madng(
+        accelerator, output_dir, tunes=nat_tunes, drv_tunes=drv_tunes
+    )
     LOGGER.info("✓ Model update complete\n")
 
     LOGGER.info(f"{'=' * 70}")
     LOGGER.info(f"Model for beam {beam} created successfully!")
     LOGGER.info(f"Location: {output_dir}")
     LOGGER.info(f"{'=' * 70}\n")
-
-
-# def main() -> None:
-#     """Main entry point for creating LHC models."""
-#     # Determine output directory relative to this script
-#     data_dir = pathlib.Path(__file__).parent.parent / "data"
-
-#     # Model naming convention: model_b{beam}__t{q1}_{q2}_{optics}
-#     nat_tunes = [0.28, 0.31]
-#     optics_label = "18cm"
-
-#     print("\n" + "=" * 70)
-#     print("LHC Model Creation Script")
-#     print("=" * 70 + "\n")
-
-#     create_lhc_models(
-#         beams=[1, 2],
-#         data_dir=data_dir,
-#         year="2025",
-#         nat_tunes=nat_tunes,
-#         optics_label=optics_label,
-#     )
-#     print("\n" + "=" * 70)
-#     print("All models created successfully!")
-#     print("=" * 70 + "\n")
-
-
-# if __name__ == "__main__":
-#     main()

@@ -33,10 +33,12 @@ class ModelCreatorMadInterface(AcceleratorMadInterface):
         model_dir: Path,
         tunes: list[float] | None = None,
         drv_tunes: list[float] | None = None,
+        deltap: float = 0.0,
         **mad_kwargs,
     ):
         super().__init__(accelerator=accelerator, **mad_kwargs)
         self.model_dir = model_dir
+        self.deltap = float(deltap)
         if tunes is None:
             # Just in case the twiss is madng based, it will be lowercase, not capitalised
             twiss = tfs.read(model_dir / "twiss.dat")
@@ -66,6 +68,7 @@ class ModelCreatorMadInterface(AcceleratorMadInterface):
         self.match_tunes(
             target_qx=self.tunes[0],
             target_qy=self.tunes[1],
+            deltap=self.deltap,
         )
         self.get_current_tunes("Final")
 
@@ -79,7 +82,7 @@ MAD.gphys.melmcol({table_name}, strength_cols)
     def get_current_tunes(self, label: str = "") -> tuple[float, float]:
         """Retrieve current tunes from the loaded sequence."""
         self.mad.send(f"""
-local tbl = twiss {{sequence=loaded_sequence}};
+local tbl = twiss {{sequence=loaded_sequence, deltap={self.deltap:.16e}}};
 {self.py_name}:send({{tbl.q1, tbl.q2}}, true)
 """)
         q1, q2 = self.mad.recv()
@@ -93,15 +96,15 @@ local tbl = twiss {{sequence=loaded_sequence}};
 
     def compute_and_export_twiss_tables(self, export_madx_names = True) -> None:
         """Compute twiss tables and export model files."""
-        self.mad.send("""
+        self.mad.send(f"""
 hnams = py:recv()
 cols = py:recv()
 str_cols = py:recv()
 
 cols = MAD.utility.tblcat(cols, str_cols)
-twiss_elements = twiss { sequence=loaded_sequence, coupling=true }
+twiss_elements = twiss {{ sequence=loaded_sequence, coupling=true, deltap={self.deltap:.16e} }}
 twiss_elements:select(nil, \\ -> true)
-twiss_elements:deselect{pattern="drift"}
+twiss_elements:deselect{{pattern="drift"}}
 """)
         model_columns = MADX_MODEL_COLUMNS if export_madx_names else MADNG_MODEL_COLUMNS
         self.mad.send(MODEL_HEADER).send(model_columns).send(MODEL_STRENGTHS)
@@ -110,7 +113,7 @@ twiss_elements:deselect{pattern="drift"}
 
         self.observe()
         self.mad.send(
-            "twiss_data = twiss {sequence=loaded_sequence, coupling=true, observe=1}"
+            f"twiss_data = twiss {{sequence=loaded_sequence, coupling=true, observe=1, deltap={self.deltap:.16e}}}"
         )
 
         self.add_strength_columns("twiss_data")
@@ -125,9 +128,10 @@ twiss_data:write("{self.model_dir / "twiss.dat"}", cols, hnams)
             self.install_ac_dipole(
                 nat_tunes=(self.tunes[0], self.tunes[1]),
                 drv_tunes=(self.drv_tunes[0], self.drv_tunes[1]),
+                deltap=self.deltap,
             )
         self.mad.send(
-            "twiss_ac = twiss {sequence=loaded_sequence, coupling=true, observe=1}"
+            f"twiss_ac = twiss {{sequence=loaded_sequence, coupling=true, observe=1, deltap={self.deltap:.16e}}}"
         )
         self.add_strength_columns("twiss_ac")
 
