@@ -50,17 +50,35 @@ def beta_from_energy(energy: float, particle: str = "proton") -> float:
 
 
 def dp2pt(dp: float, beta0: float = 1.0) -> float:
-    """Convert relative momentum deviation ``dp/p`` to MAD-NG ``pt``."""
+    """Convert relative momentum deviation ``dp/p`` to MAD-NG ``pt``.
+
+    Uses the cancellation-free identity ``sqrt(a) - b = (a - b^2)/(sqrt(a) + b)``
+    to avoid catastrophic cancellation: the naive ``sqrt((1+dp)^2 + 1/beta0^2 -
+    1) - 1/beta0`` subtracts two ~1 quantities to yield a ~dp result, losing
+    ~3 significant digits for small ``dp`` (relative error up to ~1e-12). The
+    rewritten numerator ``2*dp + dp^2`` carries no cancellation, giving
+    machine-precision accuracy.
+    """
     dp = float(dp)
     if dp == 0.0:
         return 0.0
     inv_beta0 = 1.0 / float(beta0)
-    return math.sqrt((1.0 + dp) ** 2 + (inv_beta0**2 - 1.0)) - inv_beta0
+    radicand = (1.0 + dp) ** 2 + (inv_beta0**2 - 1.0)
+    return (2.0 * dp + dp * dp) / (math.sqrt(radicand) + inv_beta0)
 
 
 def pt2dp(pt: float, beta0: float = 1.0) -> float:
-    """Convert MAD-NG ``pt`` to relative momentum deviation ``dp/p``."""
+    """Convert MAD-NG ``pt`` to relative momentum deviation ``dp/p``.
+
+    Uses the cancellation-free identity ``sqrt(a) - 1 = (a - 1)/(sqrt(a) + 1)``:
+    the naive ``sqrt(1 + 2*pt/beta0 + pt^2) - 1`` loses ~3 significant digits for
+    small ``pt`` (it is ``sqrt(1 + small) - 1``), whereas the rewritten
+    numerator ``2*pt/beta0 + pt^2`` has no cancellation and stays accurate to
+    machine precision.
+    """
     pt = float(pt)
     if pt == 0.0:
         return 0.0
-    return math.sqrt(1.0 + 2.0 * pt / float(beta0) + pt**2) - 1.0
+    inv_beta0 = 1.0 / float(beta0)
+    radicand = 1.0 + 2.0 * pt * inv_beta0 + pt**2
+    return (2.0 * pt * inv_beta0 + pt * pt) / (math.sqrt(radicand) + 1.0)

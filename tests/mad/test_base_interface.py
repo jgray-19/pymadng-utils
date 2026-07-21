@@ -360,6 +360,74 @@ def test_twiss(loaded_interface_with_beam: AcceleratorMadInterface):
     assert abs(twiss_df.headers["q2"] - 60.31) < 3e-7, f"Unexpected Qy: {twiss_df.headers['q2']}"
     interface.unobserve_elements(["BPM"])
 
+def test_twiss_pt_kwarg_is_exact_x0_injection(
+    loaded_interface_with_beam: AcceleratorMadInterface,
+) -> None:
+    """run_twiss(pt=X) is bit-identical to run_twiss(X0=[0,0,0,0,0,X]).
+
+    The ``pt`` keyword is defined as exactly that ``X0`` injection, so this is
+    the contract it must satisfy to the bit.
+    """
+    interface = loaded_interface_with_beam
+    interface.observe("BPM")
+
+    pt = 1e-3
+    tws_pt = interface.run_twiss(pt=pt)
+    tws_x0 = interface.run_twiss(X0=[0.0, 0.0, 0.0, 0.0, 0.0, pt])
+
+    for col in ("x", "px", "y", "py", "dx", "dpx", "dy", "dpy"):
+        if col not in tws_pt.columns:
+            continue
+        np.testing.assert_array_equal(
+            tws_pt[col].to_numpy(),
+            tws_x0[col].to_numpy(),
+            err_msg=f"pt vs explicit X0 differ in {col}",
+        )
+    interface.unobserve_elements(["BPM"])
+
+
+def test_twiss_pt_kwarg_matches_deltap_physically(
+    loaded_interface_with_beam: AcceleratorMadInterface,
+) -> None:
+    """run_twiss(pt=X) is physically equivalent to run_twiss(deltap=pt2dp(X)).
+
+    Both routes drive the same closed-orbit search, so the optics agree up to a
+    small residual. That residual is NOT a code-path difference: it is the
+    pt<->dp/p conversion round-off. In particular MAD-NG's internal ``deltap``
+    handling converts via ``dp2pt`` with a cancellation-prone form, differing
+    from the exact ``pt`` seed by ~1e-13, which cofind then amplifies over the
+    ring to ~1e-10 on x / ~1e-8 on dx. The ``pt`` path avoids that conversion
+    entirely and is the more accurate of the two.
+    """
+    interface = loaded_interface_with_beam
+    interface.observe("BPM")
+
+    pt = 1e-3
+    deltap = interface.pt2dp(pt)
+
+    tws_deltap = interface.run_twiss(deltap=deltap)
+    tws_pt = interface.run_twiss(pt=pt)
+
+    np.testing.assert_allclose(
+        tws_pt["x"].to_numpy(), tws_deltap["x"].to_numpy(), rtol=1e-6, atol=1e-9
+    )
+    np.testing.assert_allclose(
+        tws_pt["dx"].to_numpy(), tws_deltap["dx"].to_numpy(), rtol=1e-6, atol=1e-7
+    )
+    interface.unobserve_elements(["BPM"])
+
+
+def test_twiss_pt_kwarg_conflicts_raise(
+    loaded_interface_with_beam: AcceleratorMadInterface,
+) -> None:
+    """pt cannot be combined with an explicit X0 or deltap."""
+    interface = loaded_interface_with_beam
+    with pytest.raises(ValueError, match="'pt' cannot be combined"):
+        interface.run_twiss(pt=1e-3, deltap=0.0)
+    with pytest.raises(ValueError, match="'pt' cannot be combined"):
+        interface.run_twiss(pt=1e-3, X0=[0.0, 0.0, 0.0, 0.0, 0.0, 1e-3])
+
+
 def test_install_ac_dipole_and_twiss(loaded_ac_interface_with_beam) -> None:
     """Test AC dipole installation and verify that tunes change to driven values."""
     interface = loaded_ac_interface_with_beam

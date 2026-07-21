@@ -409,12 +409,27 @@ correct_elm = nil
         it defaults to 1 (observing observed elements every turn).
 
         Args:
-            **twiss_kwargs: Additional arguments for twiss calculation
+            **twiss_kwargs: Additional arguments for twiss calculation. The
+                convenience keyword ``pt`` runs the closed-orbit search at the
+                given longitudinal momentum by passing it as the sixth initial
+                phase-space coordinate (``X0 = {x, px, y, py, t, pt}``) rather
+                than converting to ``deltap``. This is numerically identical to
+                ``deltap = pt2dp(pt)`` (closed orbit and dispersion agree to
+                round-off) but keeps the caller in native ``pt`` space and drops
+                the ``pt -> dp/p`` round-trip. It cannot be combined with an
+                explicit ``X0`` or ``deltap``.
 
         Returns:
             TFS DataFrame with twiss results
         """
         logger.debug("Running twiss calculation")
+        if "pt" in twiss_kwargs:
+            pt = twiss_kwargs.pop("pt")
+            if "X0" in twiss_kwargs or "deltap" in twiss_kwargs:
+                raise ValueError(
+                    "run_twiss: 'pt' cannot be combined with 'X0' or 'deltap'"
+                )
+            twiss_kwargs["X0"] = [0.0, 0.0, 0.0, 0.0, 0.0, float(pt)]
         if "observe" not in twiss_kwargs:
             twiss_kwargs["observe"] = 1  # Default to no observation if not set
 

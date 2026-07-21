@@ -39,3 +39,31 @@ def test_dp_pt_conversions_round_trip_with_beta() -> None:
     dp = 0.0123
 
     assert pt2dp(dp2pt(dp, beta), beta) == pytest.approx(dp)
+
+
+@pytest.mark.parametrize("beta0", [1.0, 0.99999999, 0.52, 0.34])
+@pytest.mark.parametrize("dp", [1e-2, 1e-3, 1e-4, 1e-5, -1e-4])
+def test_dp_pt_round_trip_is_machine_precision(beta0: float, dp: float) -> None:
+    """dp -> pt -> dp must round-trip to ~machine precision.
+
+    The conversions are written in cancellation-free form; the naive
+    ``sqrt(1 + small) - const`` form loses ~3 significant digits for small ``dp``
+    (relative round-trip error up to ~1e-12, worse at low beta), which this test
+    guards against. A tolerance of 1e-14 is comfortably met by the fixed form
+    but fails the naive one.
+    """
+    assert pt2dp(dp2pt(dp, beta0), beta0) == pytest.approx(dp, rel=1e-14, abs=1e-18)
+
+
+def test_dp2pt_matches_high_precision_reference() -> None:
+    """dp2pt agrees with a 50-digit Decimal evaluation to machine precision."""
+    from decimal import Decimal, getcontext
+
+    getcontext().prec = 50
+    beta0 = 0.52
+    dp = 1e-4
+    inv_beta0 = Decimal(1) / Decimal(str(beta0))
+    exact = float(
+        ((Decimal(1) + Decimal(str(dp))) ** 2 + (inv_beta0**2 - 1)).sqrt() - inv_beta0
+    )
+    assert dp2pt(dp, beta0) == pytest.approx(exact, rel=1e-15, abs=1e-18)
