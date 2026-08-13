@@ -18,7 +18,6 @@ import numpy as np
 from pymadng import MAD
 
 from pymadng_utils.config import SHUSHING_SCRIPT
-from pymadng_utils.physics import dp2pt, pt2dp
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -26,6 +25,7 @@ if TYPE_CHECKING:
     from pymadng_utils.accelerators.base import Accelerator
 
 logger = logging.getLogger(__name__)
+
 
 class MultipoleInfo(NamedTuple):
     dk_table: str  # MAD-NG table storing perturbations: "dknl" or "dksl"
@@ -121,17 +121,39 @@ class AcceleratorMadInterface:
         """Return a concise human-readable interface summary."""
         return f"{type(self).__name__}({self.accelerator.seq_name})"
 
+    def _gphys_convert(self, func: str, value: float) -> float:
+        """Run a ``MAD.gphys`` momentum conversion on the loaded sequence's beam.
+
+        The value is sent and received over the pipe rather than interpolated
+        into the MAD chunk as a formatted string, so the double crossing the
+        boundary is bit-exact in both directions. Using MAD-NG's own conversion
+        with MAD-NG's own ``beam.beta`` is what makes a converted ``deltap``
+        identical to what ``twiss{deltap=...}`` would have seeded internally.
+        """
+        self.mad.send(
+            f"{self.py_name}:send("
+            f"MAD.gphys.{func}({self.py_name}:recv(), loaded_sequence.beam.beta))"
+        ).send(float(value))
+        return float(self.mad.recv())
+
     def dp2pt(self, dp: float) -> float:
         """Convert relative momentum deviation ``dp/p`` to MAD-NG ``pt`` using the loaded beam."""
-        return dp2pt(dp, self.beta)
+        return self._gphys_convert("dp2pt", dp)
 
     def pt2dp(self, pt: float) -> float:
         """Convert MAD-NG ``pt`` to relative momentum deviation ``dp/p`` using the loaded beam."""
-        return pt2dp(pt, self.beta)
+        return self._gphys_convert("pt2dp", pt)
 
-    def load_sequence(self) -> None:
+    def load_sequence(self, cache_translation: bool = False) -> None:
         """
         Load a sequence file into MAD-NG from the accelerator configuration.
+
+        Args:
+            cache_translation: When True, translate the MAD-X sequence into a
+                sibling ``.mad`` cache for faster subsequent loads. Off by
+                default: the translation is cheap and the shared cache is a
+                concurrency hazard (parallel loaders racing on the same file),
+                so only enable it when the same sequence is reloaded many times.
         """
         logger.debug(f"Loading sequence from {self.accelerator.sequence_file}")
         file_path = Path(self.accelerator.sequence_file).resolve()
@@ -139,9 +161,15 @@ class AcceleratorMadInterface:
             raise FileNotFoundError(f"Sequence file not found: {file_path}")
         self.mad.send("shush()")
 
-        logger.debug("Caching MAD translation for faster subsequent loads")
-        mad_cache_path = file_path.with_suffix(".mad")
-        self.mad.send(f'MADX:load("{file_path}", "{mad_cache_path}", {{rbarc=false}})')
+        # cache_translation writes a sibling .mad cache for faster reloads. It is
+        # off by default because a shared cache is a concurrency hazard: parallel
+        # loaders of the same sequence race on the file and one can read a
+        # half-written .mad that never defines the sequence. Only turn it on when
+        # loads are serial within a single process.
+        cache_target = (
+            f'"{file_path.with_suffix(".mad")}"' if cache_translation else "nil"
+        )
+        self.mad.send(f'MADX:load("{file_path}", {cache_target}, {{rbarc=false}})')
 
         if self.mad.MADX[self.accelerator.seq_name] == 0:
             raise ValueError(
@@ -162,13 +190,16 @@ class AcceleratorMadInterface:
             f"Setting beam: particle={self.accelerator.particle}, energy={self.accelerator.energy:.15e} GeV"
         )
 
-    def setup_sequence(self) -> None:
+    def setup_sequence(self, cache_translation: bool = False) -> None:
         """
         Load the sequence and set up the beam in MAD-NG.
 
         This method combines sequence loading and beam setup for convenience.
+
+        Args:
+            cache_translation: Forwarded to :meth:`load_sequence`; off by default.
         """
-        self.load_sequence()
+        self.load_sequence(cache_translation=cache_translation)
         self.setup_beam()
 
     def unobserve_all_elements(self) -> None:
@@ -403,35 +434,66 @@ correct_elm = nil
 
         return before_marker, after_marker
 
+    def _normalise_twiss_kwargs(
+        self, caller: str, twiss_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Apply the shared ``pt`` convenience handling used by Twiss callers."""
+        twiss_kwargs = dict(twiss_kwargs)
+        if twiss_kwargs.get("pt") is not None:
+            if (
+                twiss_kwargs.get("X0") is not None
+                or twiss_kwargs.get("deltap") is not None
+            ):
+                raise ValueError(
+                    f"{caller}: 'pt' cannot be combined with 'X0' or 'deltap'"
+                )
+            twiss_kwargs["X0"] = [0.0, 0.0, 0.0, 0.0, 0.0, twiss_kwargs.pop("pt")]
+        else:
+            twiss_kwargs.pop("pt", None)
+        for key in ("X0", "deltap"):
+            if twiss_kwargs.get(key) is None:
+                twiss_kwargs.pop(key, None)
+        return twiss_kwargs
+
+    def _twiss_match_command(self, **twiss_kwargs) -> str:
+        """Build a MAD-NG match command from normalized Twiss keyword arguments."""
+        twiss_kwargs = self._normalise_twiss_kwargs("match_tunes", twiss_kwargs)
+        command_parts = ["sequence=loaded_sequence"]
+        if "X0" in twiss_kwargs:
+            self.mad["match_X0"] = [float(value) for value in twiss_kwargs.pop("X0")]
+            command_parts.append("X0=match_X0")
+        if "deltap" in twiss_kwargs:
+            self.mad["match_deltap"] = float(twiss_kwargs.pop("deltap"))
+            command_parts.append("deltap=match_deltap")
+        if "observe" in twiss_kwargs:
+            command_parts.append(f"observe={int(twiss_kwargs.pop('observe'))}")
+        method = twiss_kwargs.pop("method", 6)  # Match xsuite's integrator order
+        command_parts.append(f"method={int(method)}")
+        if twiss_kwargs:
+            unexpected = ", ".join(sorted(twiss_kwargs))
+            raise ValueError(f"match_tunes: unsupported twiss kwargs: {unexpected}")
+        return r"\ -> twiss{" + ", ".join(command_parts) + "}"
+
     def run_twiss(self, **twiss_kwargs) -> pd.DataFrame:
         """
         Run TWISS calculation and return results. If 'observe' is not specified,
-        it defaults to 1 (observing observed elements every turn).
+        it defaults to 1 (observing observed elements every turn). If 'method'
+        is not specified, it defaults to 6 (MAD-NG's highest-order thick-element
+        integrator), matching xsuite's exact drift-kick-drift + yoshida4
+        integrator to ~1e-8 relative instead of the coarser ~1e-6-1.7e-5
+        relative disagreement seen with MAD-NG's default integrator.
 
         Args:
-            **twiss_kwargs: Additional arguments for twiss calculation. The
-                convenience keyword ``pt`` runs the closed-orbit search at the
-                given longitudinal momentum by passing it as the sixth initial
-                phase-space coordinate (``X0 = {x, px, y, py, t, pt}``) rather
-                than converting to ``deltap``. This is numerically identical to
-                ``deltap = pt2dp(pt)`` (closed orbit and dispersion agree to
-                round-off) but keeps the caller in native ``pt`` space and drops
-                the ``pt -> dp/p`` round-trip. It cannot be combined with an
-                explicit ``X0`` or ``deltap``.
-
+            **twiss_kwargs: Additional arguments for twiss calculation.
         Returns:
             TFS DataFrame with twiss results
         """
         logger.debug("Running twiss calculation")
-        if "pt" in twiss_kwargs:
-            pt = twiss_kwargs.pop("pt")
-            if "X0" in twiss_kwargs or "deltap" in twiss_kwargs:
-                raise ValueError(
-                    "run_twiss: 'pt' cannot be combined with 'X0' or 'deltap'"
-                )
-            twiss_kwargs["X0"] = [0.0, 0.0, 0.0, 0.0, 0.0, float(pt)]
+        twiss_kwargs = self._normalise_twiss_kwargs("run_twiss", twiss_kwargs)
         if "observe" not in twiss_kwargs:
             twiss_kwargs["observe"] = 1  # Default to no observation if not set
+        if "method" not in twiss_kwargs:
+            twiss_kwargs["method"] = 6  # Match xsuite's integrator order
 
         try:
             self.mad["tws", "flw"] = self.mad.twiss(
@@ -648,6 +710,23 @@ local {info.dk_table}, {attr} in loaded_sequence['{element_name}']
             f"Relative error not specified for family with kind {family_config['kind']}"
         )
 
+    def _set_multipole_perturbation(
+        self,
+        element_name: str,
+        attr: str,
+        info: MultipoleInfo,
+        integrated_delta: float,
+        target_strength: float,
+    ) -> None:
+        """Apply one multipole perturbation.
+
+        ``integrated_delta`` is supplied for subclasses that expose integrated
+        ``dk*l`` knobs. The base interface writes the requested absolute
+        per-metre ``target_strength`` through the normal element-strength path.
+        """
+        del info, integrated_delta
+        self._set_effective_element_strength(element_name, attr, target_strength)
+
     def apply_magnet_perturbations(
         self,
         rel_error: float | None = 1e-4,
@@ -658,7 +737,9 @@ local {info.dk_table}, {attr} in loaded_sequence['{element_name}']
         if magnet_type == "all":
             requested = ["d", "q", "s"]
         else:
-            requested = magnet_type if isinstance(magnet_type, list) else list(magnet_type)
+            requested = (
+                magnet_type if isinstance(magnet_type, list) else list(magnet_type)
+            )
         if not requested:
             return {}, {}
 
@@ -693,14 +774,13 @@ local {info.dk_table}, {attr} in loaded_sequence['{element_name}']
 
                 attr = str(family_config["attr"])
                 strength_before = float(elm[attr])
+                if strength_before == 0.0:
+                    continue
                 delta = float(rng.normal(0, abs(strength_before * element_rel_error)))
                 strength_after = strength_before + delta
 
                 info = MULTIPOLE_ATTRS.get(attr)
                 if info is not None:
-                    self._set_effective_element_strength(
-                        str(elm.name), attr, strength_after
-                    )
                     # ``_set_effective_element_strength`` writes the *integrated*
                     # perturbation (delta * length) into dknl, and the ``dk*l`` knob
                     # name is itself integrated, so record the integrated value. This
@@ -708,7 +788,16 @@ local {info.dk_table}, {attr} in loaded_sequence['{element_name}']
                     # ``get_magnet_strengths`` reads back for the same knob (which
                     # returns dknl[i] directly).
                     length = float(elm.l)
-                    magnet_strengths[f"{elm.name}.{info.dk_suffix}"] = delta * length
+                    knob_name = f"{elm.name}.{info.dk_suffix}"
+                    integrated_delta = delta * length
+                    self._set_multipole_perturbation(
+                        str(elm.name),
+                        attr,
+                        info,
+                        integrated_delta,
+                        strength_after,
+                    )
+                    magnet_strengths[knob_name] = integrated_delta
                 else:
                     elm[attr] = strength_after
                     magnet_strengths[f"{elm.name}.{attr}"] = strength_after
@@ -765,7 +854,8 @@ local {info.dk_table}, {attr} in loaded_sequence['{element_name}']
         target_qy: float,
         qx_knob: str | None = None,
         qy_knob: str | None = None,
-        deltap: float = 0.0,
+        deltap: float | None = None,
+        pt: float | None = None,
     ) -> dict[str, float]:
         """Match tunes using tune variables provided by the accelerator.
 
@@ -774,11 +864,15 @@ local {info.dk_table}, {attr} in loaded_sequence['{element_name}']
             target_qy: Target vertical tune (fractional or full)
             qx_knob: MAD variable name for horizontal tune knob (optional if accelerator provides get_tune_variables)
             qy_knob: MAD variable name for vertical tune knob (optional if accelerator provides get_tune_variables)
-            deltap: Relative momentum deviation for tune matching (default: 0.0)
+            deltap: Momentum deviation ``dp/p`` at which to match. Mutually
+                exclusive with *pt*.
+            pt: MAD-NG native longitudinal momentum at which to match. Mutually
+                exclusive with *deltap*; omit both to match on momentum.
         """
         if qx_knob is None or qy_knob is None:
             qx_knob, qy_knob = self.accelerator.tune_variables
 
+        command = self._twiss_match_command(deltap=deltap, pt=pt)
         # Check if we have been given the total tunes rather than the fractional
         qx_int, qy_int = self.accelerator.tune_integers
         if target_qx >= 1:
@@ -787,7 +881,7 @@ local {info.dk_table}, {attr} in loaded_sequence['{element_name}']
             qy_int = 0
 
         self.mad["result"] = self.mad.match(
-            command=rf"\ -> twiss{{sequence=loaded_sequence, deltap={deltap:.16e}}}",
+            command=command,
             variables=[
                 {"var": f"'MADX.{qx_knob}'", "name": f"'{qx_knob}'"},
                 {"var": f"'MADX.{qy_knob}'", "name": f"'{qy_knob}'"},
@@ -808,23 +902,31 @@ local {info.dk_table}, {attr} in loaded_sequence['{element_name}']
         """Check that the response from MAD-NG matches the expected value."""
         try:
             if (result := self.mad.recv()) != expected:
-                raise RuntimeError(f"Unexpected response from MAD-NG: {result}. {error_msg}")
+                raise RuntimeError(
+                    f"Unexpected response from MAD-NG: {result}. {error_msg}"
+                )
         except Exception as exc:
             raise RuntimeError(error_msg) from exc
 
     def perform_orbit_correction(
         self,
         machine_deltap: float,
-        target_qx: float,
-        target_qy: float,
-        corrector_file: Path | None,
+        target_qx: float | None = None,
+        target_qy: float | None = None,
+        corrector_file: Path | None = None,
         twiss_name: str = "zero_twiss",
+        correct_tunes: bool = True,
     ) -> dict[str, float]:
-        """Perform orbit correction followed by off-momentum tune rematching."""
+        """Perform orbit correction with optional off-momentum tune rematching."""
         qx_knob, qy_knob = self.accelerator.tune_variables
-        qx_int, qy_int = self.accelerator.tune_integers
+        if correct_tunes and (target_qx is None or target_qy is None):
+            raise ValueError(
+                "target_qx and target_qy are required when correct_tunes=True"
+            )
         self.mad["machine_deltap"] = machine_deltap
-        self.mad["correct_file"] = str(corrector_file.absolute()) if corrector_file else None
+        self.mad["correct_file"] = (
+            str(corrector_file.absolute()) if corrector_file else None
+        )
 
         self.mad.send(rf"""
 local correct, option in MAD
@@ -839,26 +941,11 @@ if correct_file then
 end
 option.numfmt = fmt
 
-io.write("*** rematching tunes for off-momentum twiss\n")
-match {{
-  command := twiss {{sequence=loaded_sequence, observe=0, deltap=machine_deltap}},
-  variables = {{ rtol=1e-4,
-    {{ var = 'MADX.{qx_knob}', name='{qx_knob}' }},
-    {{ var = 'MADX.{qy_knob}', name='{qy_knob}' }},
-  }},
-  equalities = {{ tol = 1e-6,
-    {{ expr = \t -> t.q1-{qx_int + target_qx:.16e}, name='q1' }},
-    {{ expr = \t -> t.q2-{qy_int + target_qy:.16e}, name='q2' }},
-  }},
-  objective = {{fmin = 1e-8}},
-  info={self._info_required()}
-}}
-
 {self.py_name}:send("Complete")
         """)
-        self._check_mad_response(
-            "Complete", "Error during MAD-NG orbit correction and tune matching"
-        )
+        self._check_mad_response("Complete", "Error during MAD-NG orbit correction")
+        if correct_tunes:
+            return self.match_tunes(target_qx, target_qy, deltap=machine_deltap)
         return {
             qx_knob: self.mad[f"MADX['{qx_knob}']"],
             qy_knob: self.mad[f"MADX['{qy_knob}']"],
@@ -941,6 +1028,7 @@ loaded_sequence:remove('__custom_marker__') -- Clean up the temporary marker
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Exit context manager and close MAD interface."""
         self.close()
+
 
 class AcceleratorErrorsMadInterface(AcceleratorMadInterface):
     """MAD interface variant that applies accelerator-specific startup errors."""

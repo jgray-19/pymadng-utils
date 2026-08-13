@@ -1,4 +1,10 @@
--- LuaJIT-only: shush()/unshush() redirect fd 1&2 to /dev/null (mutes Lua + C warnings)
+-- LuaJIT-only: shush()/unshush() mute stdout+stderr at the file-descriptor
+-- level, so C-level and Lua-level output alike go to /dev/null, and restore the
+-- originals on unshush. Muting is a single on/off state (tracked by whether the
+-- saved fds exist), so shush()/unshush() are each idempotent: calling shush()
+-- twice, or unshush() when not muted, is a harmless no-op. This makes a missed
+-- unshush() (e.g. an exception between the pair) self-correcting rather than
+-- leaving output stuck at /dev/null.
 
 local ffi = require("ffi")
 local C = ffi.C
@@ -12,32 +18,26 @@ ffi.cdef[[
 ]]
 
 local O_WRONLY = 1            -- POSIX
-local DEVNULL  = "/dev/null"
-
-local depth = 0
-local saved_out_fd, saved_err_fd
+local saved_out, saved_err   -- non-nil only while muted
 
 function shush()
-  if depth == 0 then
-    C.fflush(nil)                                  -- flush all stdio first
-    local devnull = C.open(DEVNULL, O_WRONLY)
-    saved_out_fd = C.dup(1)
-    saved_err_fd = C.dup(2)
-    C.dup2(devnull, 1)                              -- redirect stdout -> /dev/null
-    C.dup2(devnull, 2)                              -- redirect stderr -> /dev/null
-    C.close(devnull)
-  end
-  depth = depth + 1
+  if saved_out then return end                   -- already muted
+  C.fflush(nil)                                  -- flush all stdio before redirecting
+  local devnull = C.open("/dev/null", O_WRONLY)
+  if devnull < 0 then return end                 -- cannot open /dev/null: stay noisy, never break stdout
+  saved_out = C.dup(1)
+  saved_err = C.dup(2)
+  C.dup2(devnull, 1)                             -- redirect stdout -> /dev/null
+  C.dup2(devnull, 2)                             -- redirect stderr -> /dev/null
+  C.close(devnull)
 end
 
 function unshush()
-  if depth == 0 then return end
-  depth = depth - 1
-  if depth == 0 then
-    C.dup2(saved_out_fd, 1)
-    C.dup2(saved_err_fd, 2)
-    C.close(saved_out_fd)
-    C.close(saved_err_fd)
-    saved_out_fd, saved_err_fd = nil, nil
-  end
+  if not saved_out then return end               -- not muted
+  C.fflush(nil)                                  -- discard anything buffered while muted
+  C.dup2(saved_out, 1)                           -- restore stdout
+  C.dup2(saved_err, 2)                           -- restore stderr
+  C.close(saved_out)
+  C.close(saved_err)
+  saved_out, saved_err = nil, nil
 end

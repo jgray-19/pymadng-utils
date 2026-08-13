@@ -7,6 +7,7 @@ This module contains pytest tests for the AcceleratorMadInterface class.
 from __future__ import annotations
 
 import logging
+import math
 import tempfile
 from pathlib import Path
 
@@ -16,6 +17,7 @@ import pytest
 from pymadng_utils.accelerators import LHC
 from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
 from pymadng_utils.physics import beta_from_energy
+from pymadng_utils.physics import dp2pt as physics_dp2pt
 from tests.mad.helpers import (
     check_beam_setup,
     check_element_observations,
@@ -122,6 +124,63 @@ def test_interface_and_accelerator_use_matching_beta_for_dp_pt(
         loaded_interface.accelerator.dp2pt(dp)
     )
     assert loaded_interface.pt2dp(loaded_interface.dp2pt(dp)) == pytest.approx(dp)
+
+
+# Full-mantissa values: no short decimal literal reproduces these bit-for-bit,
+# so any conversion input that gets formatted into the MAD chunk (rather than
+# sent down the pipe as a double) comes back changed.
+AWKWARD_DELTAPS = [1.0 / 3.0e3, 0.1234567890123456789e-2, math.pi * 1e-4]
+AWKWARD_DELTAPS_LABELS = ["1/3000", "long_decimal", "pi/10000"]
+
+
+@pytest.mark.parametrize("dp", AWKWARD_DELTAPS, ids=AWKWARD_DELTAPS_LABELS)
+def test_interface_dp_pt_conversions_use_mad_ng_gphys(
+    loaded_interface: AcceleratorMadInterface, dp: float
+) -> None:
+    """The interface converts through ``MAD.gphys`` on the sequence beam.
+
+    This must be MAD-NG's own conversion, not the Python one: only then does a
+    converted ``deltap`` seed exactly what ``twiss{deltap=...}`` seeds itself.
+    The two implementations agree to ~1e-13, so the assertion is bit-exact
+    against gphys and merely close against the Python version.
+
+    The inputs deliberately have full mantissas, which also makes this fail if
+    the value is interpolated into the MAD chunk as a formatted literal instead
+    of being sent as a double.
+    """
+    interface = loaded_interface
+
+    interface.mad.send(
+        "py:send(MAD.gphys.dp2pt(py:recv(), loaded_sequence.beam.beta))"
+    ).send(dp)
+    expected = interface.mad.recv()
+
+    assert interface.dp2pt(dp) == expected
+    # ... and it is genuinely not the Python implementation.
+    python_value = physics_dp2pt(dp, interface.beta)
+    assert interface.dp2pt(dp) != python_value
+    assert interface.dp2pt(dp) == pytest.approx(python_value, rel=1e-12)
+
+
+@pytest.mark.parametrize("dp", AWKWARD_DELTAPS, ids=AWKWARD_DELTAPS_LABELS)
+def test_dp_pt_conversion_inputs_cross_the_pipe_bit_exactly(
+    loaded_interface: AcceleratorMadInterface, dp: float
+) -> None:
+    """The conversion input reaches MAD-NG as an exact double, not a rounded literal.
+
+    Recovers the input from the conversion output: ``pt2dp`` is the analytic
+    inverse of ``dp2pt``, so the recovered value can only land within
+    ~1e-13 of the original if the original arrived intact. A ``%.10e``-style
+    interpolation into the MAD chunk truncates ~6 digits and is caught here,
+    while the earlier bit-exact comparisons cannot see it for round inputs.
+    """
+    interface = loaded_interface
+
+    recovered = interface.pt2dp(interface.dp2pt(dp))
+
+    assert recovered == pytest.approx(dp, rel=1e-12), (
+        f"input mangled in transport: {recovered!r} from {dp!r}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -283,7 +342,7 @@ def test_insert_acd_markers(
 
 def test_getset_variables(interface: AcceleratorMadInterface) -> None:
     """Test setting MAD variables."""
-    interface.set_variables(**{"KQTL_1L1_B1": 1.2, "KQTL_1L2_B1": 2.3})
+    interface.set_variables(KQTL_1L1_B1=1.2, KQTL_1L2_B1=2.3)
     assert interface.mad.KQTL_1L1_B1 == 1.2
     assert interface.mad.KQTL_1L2_B1 == 2.3
 
@@ -294,7 +353,7 @@ def test_getset_variables(interface: AcceleratorMadInterface) -> None:
 
 def test_set_madx_variables(interface: AcceleratorMadInterface) -> None:
     """Test setting MAD-X variables."""
-    interface.set_madx_variables(**{"kqtl_1l1_b1": 1.5, "KQTL_1L2_B1": 2.5})
+    interface.set_madx_variables(kqtl_1l1_b1=1.5, KQTL_1L2_B1=2.5)
     assert interface.mad.MADX.KQTL_1L1_B1 == 1.5
     assert interface.mad.MADX.kqtl_1l2_b1 == 2.5
 
@@ -386,34 +445,195 @@ def test_twiss_pt_kwarg_is_exact_x0_injection(
     interface.unobserve_elements(["BPM"])
 
 
-def test_twiss_pt_kwarg_matches_deltap_physically(
-    loaded_interface_with_beam: AcceleratorMadInterface,
+@pytest.mark.parametrize("deltap", [1e-3, -1e-3, 1e-4, 1.0 / 3.0e3])
+def test_twiss_pt_and_deltap_are_the_same_code_path(
+    loaded_interface_with_beam: AcceleratorMadInterface, deltap: float
 ) -> None:
-    """run_twiss(pt=X) is physically equivalent to run_twiss(deltap=pt2dp(X)).
+    """``deltap=dp`` and ``pt=dp2pt(dp)`` agree to the last bit, as does MAD-NG.
 
-    Both routes drive the same closed-orbit search, so the optics agree up to a
-    small residual. That residual is NOT a code-path difference: it is the
-    pt<->dp/p conversion round-off. In particular MAD-NG's internal ``deltap``
-    handling converts via ``dp2pt`` with a cancellation-prone form, differing
-    from the exact ``pt`` seed by ~1e-13, which cofind then amplifies over the
-    ring to ~1e-10 on x / ~1e-8 on dx. The ``pt`` path avoids that conversion
-    entirely and is the more accurate of the two.
+    Both keywords are normalised to the same ``X0`` pt injection, with ``deltap``
+    converted by ``MAD.gphys.dp2pt`` on the sequence's beam and moved over the
+    pipe as a double, so all three routes -- our ``deltap``, our ``pt``, and
+    MAD-NG's own ``twiss{deltap=...}`` -- must be bit-identical.
+
+    The assertion is deliberately bit-for-bit. The previous tolerances (atol
+    1e-9 on x, 1e-7 on dx) were loose enough to hide a real ~1e-9 orbit /
+    ~1e-8 dispersion discrepancy: the test converted with ``pt2dp`` and
+    compared against MAD-NG's ``dp2pt``, and those two are not mutual inverses
+    to the bit (~1e-13 relative on the seed, amplified by the closed-orbit
+    search over the ring). Converting once, in one direction, removes it.
     """
     interface = loaded_interface_with_beam
     interface.observe("BPM")
 
-    pt = 1e-3
-    deltap = interface.pt2dp(pt)
-
+    pt = interface.dp2pt(deltap)
     tws_deltap = interface.run_twiss(deltap=deltap)
     tws_pt = interface.run_twiss(pt=pt)
 
-    np.testing.assert_allclose(
-        tws_pt["x"].to_numpy(), tws_deltap["x"].to_numpy(), rtol=1e-6, atol=1e-9
+    # MAD-NG's native deltap handling, with no interference from run_twiss
+    # beyond matching its method=6 default (xsuite-equivalent integrator).
+    interface.mad["tws_native", "flw_native"] = interface.mad.twiss(
+        sequence="loaded_sequence", deltap=deltap, observe=1, method=6
     )
-    np.testing.assert_allclose(
-        tws_pt["dx"].to_numpy(), tws_deltap["dx"].to_numpy(), rtol=1e-6, atol=1e-7
+    tws_native = interface.mad.tws_native.to_df().set_index("name")
+
+    assert list(tws_pt.columns) == list(tws_deltap.columns)
+    for other, label in ((tws_pt, "pt"), (tws_native, "native deltap")):
+        for col in tws_deltap.columns:
+            if tws_deltap[col].dtype.kind != "f":
+                continue
+            np.testing.assert_array_equal(
+                tws_deltap[col].to_numpy(),
+                other[col].to_numpy(),
+                err_msg=f"deltap vs {label} differ in column {col}",
+            )
+    for header in ("q1", "q2", "dq1", "dq2"):
+        if header in tws_deltap.headers:
+            assert tws_deltap.headers[header] == tws_pt.headers[header], header
+
+    # The seeded pt is exactly what MAD-NG propagated. That the offset genuinely
+    # takes effect on the optics is pinned quantitatively by
+    # test_twiss_deltap_moves_the_orbit_by_the_predicted_amount below.
+    np.testing.assert_array_equal(tws_deltap["pt"].to_numpy(), pt)
+    interface.unobserve_elements(["BPM"])
+
+
+@pytest.mark.parametrize(
+    "kinetic_energy, expected_beta",
+    [(6800.0, 0.9999999904832221), (0.160, 0.5197529494)],
+    ids=["flat_top", "low_beta0"],
+)
+def test_twiss_deltap_moves_the_orbit_by_the_predicted_amount(
+    seq_b1: Path, kinetic_energy: float, expected_beta: float
+) -> None:
+    """A ``deltap`` must move the closed orbit by ``dx * dp2pt(deltap)``, and the
+    residual must fall off as the offset squared.
+
+    This is the guard against ``deltap`` silently not taking effect. Asserting
+    only that the orbit is "not zero" would pass for any wrong-but-nonzero
+    seed, so instead the orbit response is checked against MAD-NG dispersion in
+    three independent ways:
+
+    1. the least-squares scale of the orbit shift onto ``dx`` equals the seeded
+       ``pt`` to <5e-4, so the magnitude is right, not merely nonzero;
+    2. that scale error, and the residual around the linear prediction, halve
+       when the offset halves -- the signature of a genuine second-order
+       remainder. A seed that is dropped, doubled, or beta-scaled wrongly
+       cannot reproduce this convergence;
+    3. at ``beta0 ~ 0.52`` the prediction built from raw ``deltap`` instead of
+       ``pt`` is off by ~93%, so the conversion direction is pinned too.
+
+    Note MAD-NG's ``dx`` is d(x)/d(pt), not d(x)/d(dp/p) -- which is precisely
+    why (3) discriminates and why the flat-top case cannot.
+    """
+    interface = AcceleratorMadInterface(
+        accelerator=LHC(beam=1, sequence_file=seq_b1, kinetic_energy=kinetic_energy)
     )
+    try:
+        assert interface.beta == pytest.approx(expected_beta, abs=1e-9)
+        interface.observe("BPM")
+
+        tws0 = interface.run_twiss()
+        x0 = tws0["x"].to_numpy()
+        dx0 = tws0["dx"].to_numpy()
+        assert np.abs(dx0).max() > 1.0, "no dispersion to predict against"
+
+        scale_errors = {}
+        residuals = {}
+        for deltap in (1e-4, 5e-5):
+            pt = interface.dp2pt(deltap)
+            shift = interface.run_twiss(deltap=deltap)["x"].to_numpy() - x0
+            assert np.abs(shift).max() > 0.0, "deltap had no effect on the orbit"
+
+            # (1) magnitude: best-fit scale of the response onto the dispersion.
+            best_fit = float(dx0 @ shift / (dx0 @ dx0))
+            assert best_fit == pytest.approx(pt, rel=5e-4), (
+                f"orbit responds as pt={best_fit:.6e}, seeded pt={pt:.6e}"
+            )
+            scale_errors[deltap] = abs(best_fit / pt - 1.0)
+
+            residual = np.abs(shift - dx0 * pt).max() / np.abs(shift).max()
+            assert residual < 2e-2
+            residuals[deltap] = residual
+
+            # (3) the same prediction built from raw deltap is badly wrong once
+            # beta0 departs from 1, which pins the conversion direction.
+            if interface.beta < 0.9:
+                raw = np.abs(shift - dx0 * deltap).max() / np.abs(shift).max()
+                assert raw > 20 * residual, (
+                    f"deltap and pt predictions are not distinguishable: "
+                    f"{raw:.3e} vs {residual:.3e}"
+                )
+
+        # (2) second-order convergence: halving the offset halves both errors.
+        assert residuals[5e-5] / residuals[1e-4] == pytest.approx(0.5, rel=0.05)
+        assert scale_errors[5e-5] / scale_errors[1e-4] == pytest.approx(0.5, rel=0.05)
+    finally:
+        interface.close()
+
+
+def test_twiss_deltap_is_converted_to_pt_not_used_raw(seq_b1: Path) -> None:
+    """``deltap`` is seeded as ``dp2pt(deltap)``, not as a raw ``pt``.
+
+    Deliberately runs the LHC sequence at a 160 MeV kinetic energy, where
+    ``beta0 ~ 0.52`` and so ``pt`` and ``dp/p`` differ by ~48%. The normalised
+    strengths in the sequence do not depend on the beam energy, so the optics
+    are unchanged and only the conversion is under test. At the real 6.8 TeV
+    energy ``beta0 = 1 - 1e-8``, the two are indistinguishable in the optics,
+    which is exactly why the tests above cannot pin the conversion down: a
+    dropped, inverted, or wrong-beta conversion is only visible at low beta.
+    """
+    interface = AcceleratorMadInterface(
+        accelerator=LHC(beam=1, sequence_file=seq_b1, kinetic_energy=0.160)
+    )
+    try:
+        assert interface.beta == pytest.approx(0.5197, abs=1e-3)
+
+        deltap = 1e-3
+        expected_pt = interface.dp2pt(deltap)
+        # pt ~ beta0 * dp/p at leading order, i.e. clearly distinct from deltap.
+        assert expected_pt == pytest.approx(deltap * interface.beta, rel=1e-3)
+
+        tws = interface.run_twiss(deltap=deltap)
+        np.testing.assert_array_equal(tws["pt"].to_numpy(), expected_pt)
+
+        # Seeding the raw deltap as pt would be a genuinely different machine
+        # state, not a round-off away.
+        tws_raw = interface.run_twiss(pt=deltap)
+        orbit_shift = np.abs(tws["x"].to_numpy() - tws_raw["x"].to_numpy()).max()
+        assert orbit_shift > 1e-5, orbit_shift
+
+        # deltap and its exact pt equivalent remain the same code path.
+        tws_pt = interface.run_twiss(pt=expected_pt)
+        np.testing.assert_array_equal(tws_pt["x"].to_numpy(), tws["x"].to_numpy())
+    finally:
+        interface.close()
+
+
+def test_twiss_deltap_zero_is_the_on_momentum_machine(
+    loaded_interface_with_beam: AcceleratorMadInterface,
+) -> None:
+    """``deltap=0`` must reproduce the on-momentum table exactly.
+
+    Guards the zero branch of the conversion: ``gphys.dp2pt`` short-circuits at
+    zero, so a seeded ``X0`` of all zeros has to be indistinguishable from
+    passing no offset at all.
+    """
+    interface = loaded_interface_with_beam
+    interface.observe("BPM")
+
+    tws0 = interface.run_twiss()
+    tws_zero = interface.run_twiss(deltap=0.0)
+
+    assert interface.dp2pt(0.0) == 0.0
+    for col in tws0.columns:
+        if tws0[col].dtype.kind != "f":
+            continue
+        np.testing.assert_array_equal(
+            tws_zero[col].to_numpy(),
+            tws0[col].to_numpy(),
+            err_msg=f"deltap=0 differs from on-momentum in column {col}",
+        )
     interface.unobserve_elements(["BPM"])
 
 
