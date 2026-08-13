@@ -8,6 +8,7 @@ This reference is organised by package area. Start with the top-level package fo
 
    package
    accelerators
+   physics
    config
    io
    mad

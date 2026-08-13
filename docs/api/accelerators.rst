@@ -13,10 +13,11 @@ Overview
 Package exports
 ---------------
 
+``Accelerator``, ``LHC``, and ``PSB`` are re-exported here from the submodules below,
+which hold their canonical documentation.
+
 .. automodule:: pymadng_utils.accelerators
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-index:
 
 Base descriptor
 ---------------

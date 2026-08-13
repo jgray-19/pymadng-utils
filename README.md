@@ -3,129 +3,121 @@
 [![codecov](https://codecov.io/gh/jgray-19/pymadng-utils/graph/badge.svg?token=L1EV8MDM6M)](https://codecov.io/gh/jgray-19/pymadng-utils)
 [![Coverage](https://github.com/jgray-19/pymadng-utils/actions/workflows/coverage.yml/badge.svg)](https://github.com/jgray-19/pymadng-utils/actions/workflows/coverage.yml)
 
-`pymadng-utils` provides thin, workflow-oriented helpers around MAD-NG, MAD-X, and OMC3 model creation. The package is aimed at two concrete use cases:
+`pymadng-utils` is a small Python library for accelerator-model workflows that cross the MAD-X/MAD-NG boundary. It provides:
 
-- loading saved sequences into MAD-NG and running optics-style operations programmatically
-- creating or post-processing accelerator model directories into saved sequences plus TWISS outputs
+- LHC and PSB machine descriptors;
+- a managed MAD-NG session that loads a saved MAD-X sequence and configures its beam;
+- observation, TWISS, tune matching, AC-dipole, orbit-correction, magnet-strength, and perturbation helpers;
+- conversion of MAD-NG TFS tables to MAD-X/OMC3 naming conventions;
+- export of reusable sequences from existing OMC3 model directories; and
+- an end-to-end LHC model-creation workflow.
 
-The supported accelerator paths in the current codebase are:
-
-- `LHC`
-- `PSB`
-- `SPS` for MAD-X sequence export helpers only
-
-## Package layout
-
-- `src/pymadng_utils/accelerators`: machine descriptors used by the interfaces
-- `src/pymadng_utils/mad`: MAD-NG interface classes
-- `src/pymadng_utils/madx`: MAD-X sequence export and TFS conversion helpers
-- `src/pymadng_utils/model_creator`: higher-level model creation workflows
-- `src/pymadng_utils/io`: knob-file helpers
-- `tests`: end-to-end and unit coverage
+The package is workflow infrastructure, not a replacement for MAD-NG, MAD-X, or OMC3. Most operations require a working accelerator software environment and real sequence/model files.
 
 ## Installation
 
-For development:
+Python 3.11 or newer is required.
+
+Install the core package:
 
 ```bash
-pip install -e .[test]
+python -m pip install .
 ```
 
-If you want to build the Sphinx docs locally:
+Install an editable checkout with the dependencies used by model creation and tests:
 
 ```bash
-pip install -e .[test]
-pip install sphinx sphinx-rtd-theme
+python -m pip install -e '.[test]'
 ```
 
-The package expects the underlying accelerator toolchain to be available in the environment you run it in, notably `pymadng`, `cpymad`, `tfs`, and `omc3` for the model-creation workflows.
+The extras are:
 
-## Main concepts
+| Extra | Adds | Intended use |
+|---|---|---|
+| `model` | `cpymad`, `omc3` | sequence export and model creation |
+| `test` | `pytest`, `pytest-cov`, `cpymad`, `omc3` | repository test suite |
+| `docs` | Sphinx and the Read the Docs theme | local documentation build |
 
-### Accelerators
+MAD-NG itself must be usable by `pymadng`; `cpymad` additionally needs a working MAD-X installation. OMC3 model creation may also require access to CERN accelerator-model repositories, depending on its `fetch` configuration.
 
-Machine-specific details live in accelerator descriptors such as `LHC` and `PSB`. They provide:
+## Quick start: load a sequence and run TWISS
 
-- the saved sequence filename and MAD sequence name
-- beam or ring metadata
-- tune knob names and integer tunes
-- BPM patterns and monitor-plane helpers
-- optional AC-dipole installation metadata
-
-### MAD-NG interfaces
-
-The `pymadng_utils.mad` package contains the runtime interfaces:
-
-- `AcceleratorMadInterface` for loading a sequence, setting up the beam, observing elements, running TWISS, changing variables, and applying perturbations
-- `AcceleratorErrorsMadInterface` for workflows that want accelerator-specific startup errors applied automatically
-- `KnobMadInterface` for knob and corrector-file handling
-- `ModelCreatorMadInterface` for model-export workflows
-
-### MAD-X sequence export
-
-`pymadng_utils.madx.make_sequence.make_madx_sequence()` converts an OMC3-created model directory into a saved MAD-X sequence that can be loaded again in MAD-NG.
-
-The function now expects a real nominal OMC3 model directory containing `job.create_model_nominal.madx`. It intentionally fails fast for layouts it cannot identify unambiguously.
-
-### Model creation workflow
-
-The higher-level workflow is:
-
-1. create a nominal model directory with OMC3
-2. export a saved MAD-X sequence from that model directory
-3. reopen the saved sequence in MAD-NG
-4. match or verify tunes
-5. export `twiss.dat`, `twiss_ac.dat`, and `twiss_elements.dat`
-
-For PSB, the workflow also supports driven models with explicit `drv_tunes` plus `driven_excitation="acd"`.
-
-## Minimal examples
-
-### Load a saved sequence in MAD-NG
+An accelerator descriptor holds the machine-specific contract: sequence name, particle and kinetic energy, BPM selection pattern, tune knobs, integer tunes, and AC-dipole element name. Constructing `AcceleratorMadInterface` immediately starts MAD-NG, loads the sequence, and attaches the beam.
 
 ```python
 from pathlib import Path
 
 from pymadng_utils.accelerators import LHC
-from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
+from pymadng_utils.mad import AcceleratorMadInterface
 
-sequence = Path("lhcb1_saved.seq")
-accelerator = LHC(sequence_file=sequence, beam=1, kinetic_energy=6800.0)
+accelerator = LHC(
+    beam=1,
+    sequence_file=Path("lhcb1_saved.seq"),
+    kinetic_energy=6800.0,  # GeV; this is kinetic, not total energy
+)
 
-with AcceleratorMadInterface(accelerator=accelerator) as interface:
-    interface.observe("IP.")
+with AcceleratorMadInterface(accelerator) as interface:
+    interface.observe()  # uses the LHC BPM pattern
     twiss = interface.run_twiss(coupling=True)
-    print(twiss.q1, twiss.q2)
+    print(twiss.headers["q1"], twiss.headers["q2"])
 ```
 
-### Update an existing model directory with MAD-NG
+`run_twiss()` returns the `pymadng` table converted to a DataFrame, indexed by element name when the result contains a `name` column. Its headers are augmented with `particle` and total `energy` in GeV.
+
+Use the interface as a context manager, or call `close()` explicitly. Loading a sequence also creates or reuses a translated `.mad` cache beside the source sequence, so that directory must be writable when the cache does not yet exist.
+
+### Off-momentum coordinates
+
+MAD-NG uses `pt`, while many accelerator workflows use relative momentum deviation `dp/p`. The descriptor and interface both expose beam-aware conversions:
 
 ```python
-from pathlib import Path
-
-from pymadng_utils.accelerators import PSB
-from pymadng_utils.madx.make_sequence import make_madx_sequence
-from pymadng_utils.model_creator.madng_utils import update_model_with_madng
-
-model_dir = Path("path/to/psb_model")
-sequence_file = make_madx_sequence(model_dir)
-
-update_model_with_madng(
-    accelerator=PSB(sequence_file=sequence_file, ring=3),
-    model_dir=model_dir,
-    tunes=[0.17, 0.225],
-    drv_tunes=[0.162, 0.232],
-)
+with AcceleratorMadInterface(accelerator) as interface:
+    pt = interface.dp2pt(1e-3)
+    twiss = interface.run_twiss(pt=pt, coupling=True)
 ```
 
-## Documentation
+The convenience `pt=` argument is mutually exclusive with explicit `X0=` and `deltap=` arguments. A `deltap=` argument (without an explicit `X0=`) is normalised through the same path: it is converted to `pt` and seeded as the sixth `X0` coordinate, so `run_twiss(deltap=dp)`, `run_twiss(pt=interface.dp2pt(dp))`, and MAD-NG's own `twiss{deltap=dp}` are all bit-identical.
 
-The Sphinx docs live in `docs/`.
+`interface.dp2pt`/`interface.pt2dp` run `MAD.gphys.dp2pt`/`pt2dp` inside MAD-NG on the loaded sequence's `beam.beta`, with the value sent and received over the pipe as a double, so nothing is lost to string formatting or to a second implementation of the same formula. Note these are not mutual inverses to the last bit (~1e-13 relative), and the closed-orbit search amplifies that to ~1e-9 on the orbit over a full ring, so convert once and stay in one coordinate rather than round-tripping. Standalone conversion functions are available from `pymadng_utils.physics` when the reference `beta` is already known and no MAD-NG session is at hand.
 
-Build them locally with:
+## What else is here
+
+The [usage guide](docs/usage.rst) documents the rest in full: the LHC and PSB
+descriptors, the four MAD-NG interface classes and their operations, saved-sequence
+export from an OMC3 model directory (LHC, PSB, SPS), model-table regeneration, the
+packaged end-to-end LHC creator, and the TFS/knob conversion helpers. The
+[API reference](docs/api/index.rst) documents each object from its docstrings.
+
+## Development
+
+Run the test suite:
 
 ```bash
+pytest
+```
+
+Some tests start MAD-NG or MAD-X and use committed accelerator fixtures; they are integration tests, not pure unit tests.
+
+Build the Sphinx documentation:
+
+```bash
+python -m pip install -e '.[docs]'
 make -C docs html
 ```
 
-The entry point is `docs/index.rst`, and the API reference is generated from the package modules.
+The generated site starts at `docs/_build/html/index.html`.
+
+## Repository layout
+
+```text
+src/pymadng_utils/
+├── accelerators/   LHC/PSB descriptors
+├── io/             knob-file I/O
+├── mad/            MAD-NG session interfaces
+├── mad_scripts/    packaged MAD-NG support scripts
+├── madx/           sequence export and TFS conversion
+├── model_creator/  higher-level model workflows
+└── physics.py      particle masses and dp/p ↔ pt conversion
+```
+
+The project is distributed under the terms in [`LICENSE`](LICENSE).

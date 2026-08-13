@@ -1,27 +1,22 @@
-pymadng-utils documentation
-===========================
+pymadng-utils
+==============
 
-``pymadng-utils`` provides utility code around MAD-NG, MAD-X, and model-generation workflows. It is designed for accelerator workflows that need a small Python layer over saved sequences, OMC3 model directories, and exported TWISS data.
+``pymadng-utils`` connects saved MAD-X sequences, MAD-NG sessions, and OMC3 model directories. It supplies LHC and PSB machine descriptors, reusable MAD-NG operations, sequence export, TFS conversion, and model-table generation.
 
-The package is split into a few focused areas:
+The :doc:`usage` page explains the supported workflows and their file contracts. The :doc:`api/index` pages document the Python objects directly from their source docstrings.
 
-* ``pymadng_utils.accelerators`` for machine descriptors that define sequence names, beam settings, tune knobs, and optional perturbation/error metadata.
-* ``pymadng_utils.mad`` for reusable MAD-NG interface classes.
-* ``pymadng_utils.madx`` for MAD-X sequence export and TFS conversion helpers.
-* ``pymadng_utils.io`` for lightweight knob file I/O.
-* ``pymadng_utils.model_creator`` for OMC3 model creation workflows.
+Scope
+-----
 
-The supported code paths covered by the repository today are:
+* Runtime MAD-NG descriptors and interfaces: LHC and PSB.
+* OMC3 model-directory sequence export: LHC, PSB, and SPS.
+* Packaged end-to-end model creation: LHC.
 
-* LHC model creation and saved-sequence workflows
-* PSB model creation, including explicit driven AC-dipole configurations
-* SPS support in the sequence-export helper layer
-
-Start with the usage guide if you want the workflow-level picture. Use the API reference when you already know which module you need.
+Python 3.11 or newer is required. Model creation and sequence export require the optional ``model`` dependencies and working MAD-X/OMC3 installations.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents
+   :caption: Documentation
 
    usage
    api/index
