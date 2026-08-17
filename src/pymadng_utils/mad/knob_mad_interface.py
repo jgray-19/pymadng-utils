@@ -122,8 +122,12 @@ class KnobMadInterface(AcceleratorMadInterface):
             )
             return None
         required = {"ename", "kind", "hkick", "hkick_old", "vkick", "vkick_old"}
-        if not required.issubset(table.columns):
-            return None
+        missing = required.difference(table.columns)
+        if missing:
+            raise ValueError(
+                f"{path} is a TFS table but is missing the corrector columns: "
+                + ", ".join(sorted(missing))
+            )
         return table
 
     def _apply_changed_correctors(
