@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from pymadng_utils.accelerators import LHC
-from pymadng_utils.mad.knob_mad_interface import KnobMadInterface
+from pymadng_utils.mad.knob_mad_interface import KnobMadInterface, resolve_knobs
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -62,6 +62,29 @@ py:send(count)
 """)
     bpm_count_with_filter = knob_interface_with_beam.mad.recv()
     assert bpm_count_with_filter > 0, "No BPMs were observed after filtering"
+
+
+def test_resolve_knobs_returns_a_copy_of_mapping() -> None:
+    """Mappings should be resolved directly without modifying the input."""
+    knobs = {"dqx_b1_op": 1.25e-3, "dqy_b1_op": -2.5e-3}
+
+    resolved = resolve_knobs(knobs)
+
+    assert resolved == knobs
+    assert resolved is not knobs
+
+
+@pytest.mark.parametrize("as_path", [False, True])
+def test_resolve_knobs_reads_knob_file(
+    tmp_path: Path, as_path: bool
+) -> None:
+    """String and Path inputs should both be read as knob files."""
+    knob_file = tmp_path / "knobs.txt"
+    knob_file.write_text("dqx_b1_op\t1.250000e-03\ndqy_b1_op\t-2.500000e-03\n")
+
+    resolved = resolve_knobs(knob_file if as_path else str(knob_file))
+
+    assert resolved == {"dqx_b1_op": 1.25e-3, "dqy_b1_op": -2.5e-3}
 
 
 def test_apply_corrector_strengths_updates_kickers(

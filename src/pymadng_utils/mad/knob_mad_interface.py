@@ -11,9 +11,22 @@ from pymadng_utils.io.utils import read_knobs
 from .accelerator_mad_interface import AcceleratorMadInterface
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+def resolve_knobs(knobs: Mapping[str, float] | str | Path) -> dict[str, float]:
+    """Knob name/value pairs, whether given directly or as a file to read.
+
+    Callers that already hold the knobs in memory pass the mapping and no file
+    is ever written; callers holding a user-authored ``name<TAB>value`` file
+    pass the path and it is read here, in exactly one place.
+    """
+    if isinstance(knobs, str | Path):
+        return dict(read_knobs(Path(knobs)))
+    return dict(knobs)
 
 
 class KnobMadInterface(AcceleratorMadInterface):
@@ -65,48 +78,69 @@ class KnobMadInterface(AcceleratorMadInterface):
             self.unobserve_elements(bad_bpms)
             logger.debug(f"Set up observation for bad BPMs: {bad_bpms}")
 
-    def set_corrector_strengths(self, corrector_strengths: str | Path) -> None:
-        """Load corrector strengths from file and apply them to the sequence."""
-        import tfs
+    def set_corrector_strengths(
+        self, corrector_knobs: Mapping[str, float] | str | Path
+    ) -> None:
+        """Apply corrector settings, given as knobs or as a corrector table file.
 
-        path = Path(corrector_strengths)
-        if not path.exists():
-            logger.warning(f"Corrector strengths file not found: {path}")
-            return
-        try:
-            corrector_table = tfs.read(path)
+        A mapping is a set of MAD-X knob variables and is sent as such. A path is
+        read first: a TFS *corrector table* (``ename``/``kind``/``hkick``...) is
+        applied element by element, anything else is parsed as a knobs file.
+        The two are different data shapes, not two spellings of one, so the
+        format is decided by reading -- never by catching a failure to apply.
+        """
+        if isinstance(corrector_knobs, str | Path):
+            path = Path(corrector_knobs)
+            if not path.exists():
+                logger.warning(f"Corrector strengths file not found: {path}")
+                return
+            corrector_table = self._read_corrector_table(path)
+            if corrector_table is not None:
+                self._apply_changed_correctors(corrector_table, source=str(path))
+                self.mad.send(f"{self.py_name}:send(true)")
+                assert self.mad.recv(), "Failed to set corrector strengths"
+                return
 
-            # Filter out monitor elements from the corrector table
-            non_monitors = corrector_table["kind"] != "monitor"
-            corrector_table: tfs.TfsDataFrame = corrector_table[non_monitors]  # type: ignore[assignment, not-subscriptable]
-
-            # Log how many non-zero correctors are being applied
-            changed = (corrector_table["hkick"] != corrector_table["hkick_old"]) | (
-                corrector_table["vkick"] != corrector_table["vkick_old"]
-            )
-            logger.info(
-                f"Applying {changed.sum()} non-zero corrector strengths from {path}"  # type: ignore[unresolved-attribute]
-            )
-
-            # Apply corrector strengths for non-zero correctors only
-            self.apply_corrector_strengths(corrector_table[changed])  # type: ignore[invalid-argument-type]
-        except (tfs.TfsFormatError, UnboundLocalError) as e:
-            logger.warning(
-                f"Error reading or applying corrector strengths: {e}, assuming knobs"
-            )
-            knobs = read_knobs(path)
-            for name, val in knobs.items():
-                self.mad.send(f"MADX['{name}'] = {val}")
-
-            logger.info(f"Set {len(knobs)} corrector knobs from {path}")
+        knobs = resolve_knobs(corrector_knobs)
+        for name, val in knobs.items():
+            self.mad.send(f"MADX['{name}'] = {val}")
+        logger.info(f"Set {len(knobs)} corrector knobs")
 
         self.mad.send(f"{self.py_name}:send(true)")
         assert self.mad.recv(), "Failed to set corrector strengths"
 
-    def set_knobs(self, knobs_file: str | Path) -> None:
-        """Load and set predefined knobs from file."""
-        path = Path(knobs_file)
-        knobs = read_knobs(path)
+    @staticmethod
+    def _read_corrector_table(path: Path) -> pd.DataFrame | None:
+        """The TFS corrector table at *path*, or ``None`` if it is not one."""
+        import tfs
+
+        try:
+            table = tfs.read(path)
+        except (tfs.TfsFormatError, UnboundLocalError, ValueError) as error:
+            logger.debug(
+                f"{path} is not a TFS corrector table ({error}); reading as knobs"
+            )
+            return None
+        required = {"ename", "kind", "hkick", "hkick_old", "vkick", "vkick_old"}
+        if not required.issubset(table.columns):
+            return None
+        return table
+
+    def _apply_changed_correctors(
+        self, corrector_table: pd.DataFrame, *, source: str
+    ) -> None:
+        non_monitors = corrector_table[corrector_table["kind"] != "monitor"]
+        changed = (non_monitors["hkick"] != non_monitors["hkick_old"]) | (
+            non_monitors["vkick"] != non_monitors["vkick_old"]
+        )
+        logger.info(
+            f"Applying {changed.sum()} non-zero corrector strengths from {source}"
+        )
+        self.apply_corrector_strengths(non_monitors[changed])
+
+    def set_knobs(self, tune_knobs: Mapping[str, float] | str | Path) -> None:
+        """Set predefined knobs, given directly or as a knobs file."""
+        knobs = resolve_knobs(tune_knobs)
         # Get existing knob names in MAD
         prev = self.mad.recv_vars(*[f"MADX['{name}']" for name in knobs])
 
@@ -117,4 +151,4 @@ class KnobMadInterface(AcceleratorMadInterface):
         assert self.mad.recv(), "Failed to set knobs"
 
         logger.debug(f"Previous knob values: {prev}")
-        logger.debug(f"Set knobs from {path}: {len(knobs)}")
+        logger.debug(f"Set {len(knobs)} knobs")

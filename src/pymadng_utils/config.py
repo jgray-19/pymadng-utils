@@ -13,9 +13,6 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Physical constants
-PROTON_MASS = 938.27208816 * 1e-3  # [GeV] Proton energy-mass
-
 # =============================================================================
 # FILE PATHS
 # =============================================================================
