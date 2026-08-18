@@ -363,31 +363,29 @@ correct_elm = nil
             self.observe_element(marker_name)
         return marker_name
 
-    def insert_acd_markers(self, element_name: str | None = None) -> tuple[str, str]:
+    def insert_acd_markers(self) -> tuple[str, str]:
         """Insert thin monitor endpoints immediately before and after the AC-dipole element.
-
-        Args:
-            element_name: Optional explicit element name. Defaults to the
-                accelerator's AC-dipole marker element.
 
         Returns:
             Tuple of ``(before_marker_name, after_marker_name)``. The historical
             names are kept, but the installed elements are monitors so MAD-NG
             monitor callbacks include them in tracking output.
         """
-        element_name = self.accelerator.ac_dipole_name
+        # MAD-NG uses lowercase element names in the loaded sequence
+        element_name = self.accelerator.ac_dipole_name.lower()
 
         before_marker = self.accelerator.acd_marker_name("before")
         after_marker = self.accelerator.acd_marker_name("after")
 
         self.mad.send(f"""
-{self.py_name}:send(loaded_sequence['{element_name}'] ~= 0, true)
+{self.py_name}:send(loaded_sequence['{element_name}'], true) ! 0 or nil?
         """)
         if not bool(self.mad.recv()):
             raise ValueError(f"Could not find element: {element_name}")
 
         self.mad.send(f"""
 local seq_elm = loaded_sequence['{element_name}']
+print("ACD element '{element_name}' is", seq_elm)
 {self.py_name}:send(loaded_sequence:upos(seq_elm), true)
 {self.py_name}:send({{seq_elm.refpos or (loaded_sequence.refer or "centre"), seq_elm.l}}, true)
         """)

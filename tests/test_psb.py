@@ -34,9 +34,10 @@ class DummyAccelerator(Accelerator):
         return 1, 2
 
 
-def test_psb_infers_ring_and_defaults(seq_psb3: Path) -> None:
+def test_psb_infers_ring_and_defaults() -> None:
     """PSB should infer the ring from the saved sequence name and expose defaults."""
-    accel = PSB(sequence_file=seq_psb3)
+    # Use a fake sequence file path to test the PSB accelerator descriptor.
+    accel = PSB(sequence_file="psb3_saved.seq")
 
     assert accel.ring == 3
     assert accel.seq_name == "psb3"

@@ -159,6 +159,7 @@ def test_psb_saved_sequence_loads_in_madng(psb_model_dir: Path) -> None:
         with contextlib.suppress(Exception):
             interface.close()
 
+    # This will fail in a future version of MAD-NG, if we keep this "fix" from Silke.
     assert abs(twiss.q1 % 1 - PSB_NAT_TUNES[0]) < 1e-6
     assert abs(twiss.q2 % 1 - PSB_NAT_TUNES[1]) < 1e-6
     assert "BR3.BPM3L3" in twiss.index
