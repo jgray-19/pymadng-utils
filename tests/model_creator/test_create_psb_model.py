@@ -119,8 +119,8 @@ def test_create_psb_model_via_omc3_api(psb_model_dir: Path) -> None:
     assert abs(twiss_ac.headers["Q1"] % 1 - PSB_NAT_TUNES[0]) < 1e-6
     assert abs(twiss_ac.headers["Q2"] % 1 - PSB_NAT_TUNES[1]) < 1e-6
     assert "BR3.BPM3L3" in twiss.index
-    assert "HACMAP" not in twiss_elements.index
-    assert "VACMAP" not in twiss_elements.index
+    assert "HACMAP" in twiss_elements.index
+    assert "VACMAP" in twiss_elements.index
 
 
 def test_create_psb_model_with_explicit_acd(
@@ -141,8 +141,8 @@ def test_create_psb_model_with_explicit_acd(
     assert abs(twiss_ac.headers["Q1"] % 1 - PSB_DRV_TUNES[0]) < 1e-6
     assert abs(twiss_ac.headers["Q2"] % 1 - PSB_DRV_TUNES[1]) < 1e-6
     assert install_marker in twiss_elements.index
-    assert "HACMAP" not in twiss_elements.index
-    assert "VACMAP" not in twiss_elements.index
+    assert "HACMAP" in twiss_elements.index
+    assert "VACMAP" in twiss_elements.index
 
 
 

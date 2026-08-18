@@ -57,12 +57,9 @@ class PSB(Accelerator):
 
     @property
     def ac_dipole_name(self) -> str:
-        """Return the PSB AC-dipole installation element.
-
-        DES3L1 is the thick exciter element itself; its sequence position
-        (refer=centre) is already the kick centre, so the offset is zero.
-        """
-        return f"BR{self.ring}.DES3L1"
+        """Return the PSB AC-dipole installation element."""
+        # return f"BR{self.ring}.DES3L1"
+        return "HACMAP"  # This assumes we have installed the marker in the sequence, which is what we do in the model creation workflow.
 
     # def get_exciter_bpm(self) -> tuple[str, str]:
     #     """Return the two BPMs adjacent to the PSB exciter."""

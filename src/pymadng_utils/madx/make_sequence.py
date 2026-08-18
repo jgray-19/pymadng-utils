@@ -125,13 +125,12 @@ def _extract_psb_script(job_text: str) -> str:
     return job_text[: match.end()] + "\n"
 
 
-def _strip_psb_ac_maps(seq_path: Path) -> None:
+def _psb_ac_maps_to_markers(seq_path: Path) -> None:
     """Remove PSB AC-map content from the saved sequence.
 
     The nominal MAD-X job installs thin ``hacmap``/``vacmap`` matrix elements
-    for AC-dipole excitation. These are stripped here so the saved sequence is
-    clean; the model creator installs the MAD-NG-native AC dipole itself when
-    driven tunes are requested.
+    for AC-dipole excitation. These are converted to markers in the final sequence,
+    since the AC-dipole is installed differently in MAD-NG.
     """
     seq_text = seq_path.read_text()
 
@@ -142,9 +141,10 @@ def _strip_psb_ac_maps(seq_path: Path) -> None:
         # Coefficient assignment, matrix definition, and any placement.
         seq_text = re.sub(coeff_pat, "", seq_text)
         seq_text = re.sub(
-            rf"(?im)^\s*{elm}\s*:\s*matrix\s*,\s*l:?=\s*[^;]+;\s*$", "", seq_text
+            rf"(?im)^\s*{elm}\s*:\s*matrix\s*,\s*l:?=\s*[^;]+;\s*$",
+            f"{elm}: marker;",
+            seq_text,
         )
-        seq_text = re.sub(rf"(?im)^\s*{elm}\s*,\s*at\s*=[^;]+;\s*$", "", seq_text)
 
     seq_path.write_text(seq_text)
 
@@ -198,7 +198,7 @@ def _make_psb_sequence(
         shutil.copy2(saved_seq, seq_path)
         saved_seq.unlink(missing_ok=True)
 
-    _strip_psb_ac_maps(seq_path)
+    _psb_ac_maps_to_markers(seq_path)
     return seq_path, ring
 
 
