@@ -372,13 +372,13 @@ correct_elm = nil
             monitor callbacks include them in tracking output.
         """
         # MAD-NG uses lowercase element names in the loaded sequence
-        element_name = self.accelerator.ac_dipole_name.lower()
+        element_name = self.accelerator.ac_dipole_name
 
         before_marker = self.accelerator.acd_marker_name("before")
         after_marker = self.accelerator.acd_marker_name("after")
 
         self.mad.send(f"""
-{self.py_name}:send(loaded_sequence['{element_name}'], true) ! 0 or nil?
+{self.py_name}:send(loaded_sequence['{element_name}'] and 1 or 0, true) ! 0 or nil?
         """)
         if not bool(self.mad.recv()):
             raise ValueError(f"Could not find element: {element_name}")
