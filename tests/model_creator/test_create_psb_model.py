@@ -5,12 +5,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 import tfs
-from omc3.model_creator import create_instance_and_model
 
 from pymadng_utils.accelerators import PSB
 from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
-from pymadng_utils.madx.make_sequence import make_madx_sequence
-from pymadng_utils.model_creator.madng_utils import update_model_with_madng
+from pymadng_utils.model_creator.create_models import create_psb_model
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,52 +17,19 @@ PSB_NAT_TUNES = (0.17, 0.225)
 PSB_DRV_TUNES = (0.162, 0.232)
 
 
-def _create_psb_nominal_model(
-    output_dir: Path,
-    acc_models_dir: Path,
-    *,
-    drv_tunes: tuple[float, float] | None = None,
-) -> None:
-    kwargs = {
-        "outputdir": output_dir,
-        "accel": "psbooster",
-        "type": "nominal",
-        "nat_tunes": list(PSB_NAT_TUNES),
-        "dpp": 0.0,
-        "fetch": "path",
-        "path": acc_models_dir,
-        "scenario": "lhc_indiv",
-        "year": "2026",
-        "cycle_point": "1_flat_bottom",
-        "str_file": "psb_fb_lhcindiv.str",
-        "ring": 3,
-        "list_choices": False,
-        "show_help": False,
-        "logfile": None,
-    }
-    if drv_tunes is not None:
-        kwargs["drv_tunes"] = list(drv_tunes)
-        kwargs["driven_excitation"] = "acd"
-
-    create_instance_and_model(
-        **kwargs,
-    )
-
-
 @pytest.fixture(scope="module")
 def psb_model_dir(
     tmp_path_factory: pytest.TempPathFactory, acc_models_psb_path: Path
 ) -> Path:
     """Create a full PSB model from the committed minimal PSB acc-models snapshot."""
     model_dir = tmp_path_factory.mktemp("psb_model") / "ring3_model"
-    _create_psb_nominal_model(model_dir, acc_models_psb_path)
-
-    sequence_file = make_madx_sequence(model_dir)
-    update_model_with_madng(
-        accelerator=PSB(sequence_file=sequence_file, ring=3),
-        model_dir=model_dir,
-        tunes=list(PSB_NAT_TUNES),
-        drv_tunes=None,
+    create_psb_model(
+        ring=3,
+        output_dir=model_dir,
+        year="2026",
+        fetch="path",
+        path=acc_models_psb_path,
+        nat_tunes=list(PSB_NAT_TUNES),
     )
     return model_dir
 
@@ -75,17 +40,13 @@ def psb_model_dir_with_acd(
 ) -> Path:
     """Create a PSB model with explicit driven tunes and ACD excitation."""
     model_dir = tmp_path_factory.mktemp("psb_model_acd") / "ring3_model"
-    _create_psb_nominal_model(
-        model_dir,
-        acc_models_psb_path,
-        drv_tunes=PSB_DRV_TUNES,
-    )
-
-    sequence_file = make_madx_sequence(model_dir)
-    update_model_with_madng(
-        accelerator=PSB(sequence_file=sequence_file, ring=3),
-        model_dir=model_dir,
-        tunes=list(PSB_NAT_TUNES),
+    create_psb_model(
+        ring=3,
+        output_dir=model_dir,
+        year="2026",
+        fetch="path",
+        path=acc_models_psb_path,
+        nat_tunes=list(PSB_NAT_TUNES),
         drv_tunes=list(PSB_DRV_TUNES),
     )
     return model_dir

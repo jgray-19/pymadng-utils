@@ -471,9 +471,9 @@ def test_twiss_pt_and_deltap_are_the_same_code_path(
     tws_pt = interface.run_twiss(pt=pt)
 
     # MAD-NG's native deltap handling, with no interference from run_twiss
-    # beyond matching its method=6 default (xsuite-equivalent integrator).
+    # beyond matching its method=6 and cotol=1e-12 defaults.
     interface.mad["tws_native", "flw_native"] = interface.mad.twiss(
-        sequence="loaded_sequence", deltap=deltap, observe=1, method=6
+        sequence="loaded_sequence", deltap=deltap, observe=1, method=6, cotol=1e-12
     )
     tws_native = interface.mad.tws_native.to_df().set_index("name")
 

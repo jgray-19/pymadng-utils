@@ -3,8 +3,6 @@
 The module defines:
 - ``AcceleratorMadInterface``: Base class providing core MAD-NG operations like sequence loading, beam setup, variable management, marker installation, and TWISS execution.
 
-
-Backward-compatible aliases are kept for existing imports.
 """
 
 from __future__ import annotations
@@ -66,11 +64,16 @@ def _build_multipole_attrs(max_order: int) -> dict[str, MultipoleInfo]:
 
 
 MULTIPOLE_ATTRS = _build_multipole_attrs(MAX_MULTIPOLE)
-MISALIGN_ATTRS = frozenset({"dx", "dy"})
+MISALIGN_ATTRS = frozenset({"dx", "dy", "ds"})
+# Absolute, non-multipole element fields set directly (see the ``else`` branch
+# of ``set_magnet_strengths``): unlike ``dx``/``dy``/``ds`` these are not part of the
+# element's ``misalign`` table in MAD-NG.
+DIRECT_FIELD_ATTRS = frozenset({"tilt"})
 
 MAGNET_STRENGTH_SUFFIXES = (
     {f".{attr}" for attr in MULTIPOLE_ATTRS}
     | {f".{attr}" for attr in MISALIGN_ATTRS}
+    | {f".{attr}" for attr in DIRECT_FIELD_ATTRS}
     | {".kick"}
 )
 
@@ -480,6 +483,9 @@ correct_elm = nil
         integrator), matching xsuite's exact drift-kick-drift + yoshida4
         integrator to ~1e-8 relative instead of the coarser ~1e-6-1.7e-5
         relative disagreement seen with MAD-NG's default integrator.
+        The closed-orbit tolerance ``cotol`` defaults to 1e-12, where the orbit
+        reaches the twiss/tracking floor; MAD-NG's default misses it by up to
+        5e-11 m once the lattice carries orbit and momentum errors together.
 
         Args:
             **twiss_kwargs: Additional arguments for twiss calculation.
@@ -492,6 +498,8 @@ correct_elm = nil
             twiss_kwargs["observe"] = 1  # Default to no observation if not set
         if "method" not in twiss_kwargs:
             twiss_kwargs["method"] = 6  # Match xsuite's integrator order
+        if "cotol" not in twiss_kwargs:
+            twiss_kwargs["cotol"] = 1e-12  # The default leaves ~5e-11 m on distorted orbits
 
         try:
             self.mad["tws", "flw"] = self.mad.twiss(
