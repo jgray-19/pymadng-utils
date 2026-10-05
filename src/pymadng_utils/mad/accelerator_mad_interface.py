@@ -106,7 +106,9 @@ class AcceleratorMadInterface:
         self.py_name = self.mad.py_name
         self.mad.send(SHUSHING_SCRIPT.read_text())
         self.mad.send("__observed_flag__ = MAD.element.flags.observed")
-        self.mad.send("MADX.option.rbarc = false")
+        if self.accelerator.NOCHARGE:
+            self.mad.send("MAD.option.nocharge = true")
+        self.mad.send(f"MADX.option.rbarc = {str(self.accelerator.RBARC).lower()}")
 
         # Load the default sequence and set up the beam immediately, as these are common to all workflows.
         self.setup_sequence()
@@ -172,7 +174,7 @@ class AcceleratorMadInterface:
         cache_target = (
             f'"{file_path.with_suffix(".mad")}"' if cache_translation else "nil"
         )
-        self.mad.send(f'MADX:load("{file_path}", {cache_target}, {{rbarc=false}})')
+        self.mad.send(f'MADX:load("{file_path}", {cache_target}, {{rbarc={str(self.accelerator.RBARC).lower()}}})')
 
         if self.mad.MADX[self.accelerator.seq_name] == 0:
             raise ValueError(
@@ -192,6 +194,11 @@ class AcceleratorMadInterface:
         logger.debug(
             f"Setting beam: particle={self.accelerator.particle}, energy={self.accelerator.energy:.15e} GeV"
         )
+        # A reversed sequence (e.g. the MAD-X lhcb2, listed in beam-1 order) must be run backwards.
+        seq_dir = getattr(self.accelerator, "seq_dir", 1)
+        if seq_dir != 1:
+            self.mad.send(f"loaded_sequence.dir = {int(seq_dir)}")
+            logger.debug(f"Setting sequence direction: dir={int(seq_dir)}")
 
     def setup_sequence(self, cache_translation: bool = False) -> None:
         """
@@ -227,27 +234,8 @@ class AcceleratorMadInterface:
         )
 
     def observe_element(self, element_name: str, unobserve_first: bool = False) -> None:
-        """Observe a single element matched by its exact name.
-
-        Unlike :meth:`observe`, which treats its argument as a Lua pattern, this
-        anchors (``^``...``$``) and escapes the name so it matches only that
-        element. Observing a bare name such as ``BPH.13008`` would otherwise be an
-        unanchored Lua pattern in which ``.`` is a wildcard, so it also selects any
-        neighbour whose name contains it as a substring (e.g. the centre-reference
-        marker ``OMC_MARKER_BPH.13008``), corrupting the observed-BPM count.
-        """
-        logger.debug(f"Observing exact element: {element_name}")
-        if unobserve_first:
-            self.unobserve_all_elements()
-        # Escape Lua pattern magic characters and anchor both ends, all in Lua so
-        # the exact name (not a pattern) drives the selection.
-        self.mad.send(
-            f"""
-local _exact = '{element_name}'
-local _pattern = '^' .. _exact:gsub('[%(%)%.%%%+%-%*%?%[%]%^%$]', '%%%1') .. '$'
-loaded_sequence:select(__observed_flag__, {{pattern=_pattern}})
-"""
-        )
+        """Observe a single element matched by its exact name (see :meth:`observe_elements`)."""
+        self.observe_elements([element_name], unobserve_first=unobserve_first)
 
     def unobserve(self, pattern: str | None = None) -> None:
         """
@@ -276,10 +264,23 @@ loaded_sequence:select(__observed_flag__, {{pattern=_pattern}})
     def observe_elements(
         self, element_names: list[str], unobserve_first: bool = True
     ) -> None:
+        """Observe the elements matched by their exact names, in one MAD-NG call.
+
+        Unlike :meth:`observe`, which treats its argument as a Lua pattern, this
+        selects by exact name. Observing a bare name such as ``BPH.13008`` as an
+        unanchored Lua pattern, where ``.`` is a wildcard, would also select any
+        neighbour whose name contains it as a substring (e.g. the centre-reference
+        marker ``OMC_MARKER_BPH.13008``), corrupting the observed-BPM count.
+        """
+        logger.debug(f"Observing exact elements: {element_names}")
         if unobserve_first:
             self.unobserve_all_elements()
-        for pattern in element_names:
-            self.observe_element(pattern, unobserve_first=False)
+        if not element_names:
+            return
+        self.mad["__observe_names"] = list(element_names)
+        self.mad.send(
+            "loaded_sequence:select(__observed_flag__, {list = __observe_names})"
+        )
 
     def cycle_sequence(self, marker_name: str | None = None) -> None:
         """
@@ -311,7 +312,30 @@ loaded_sequence:select(__observed_flag__, {{pattern=_pattern}})
         """
         Make an element thin by replacing it with a zero-length copy of itself.
 
-        The replacement inherits from the original element (preserving its kind
+        Convenience wrapper around :meth:`make_elements_thin` for a single element.
+
+        Args:
+            element_name: Name of the element to replace
+            marker_name: Name of the new marker (default: the element's own name)
+            observe_after: Whether to observe the new marker after replacement
+
+        Returns:
+            str: The name of the marker that replaces the original element.
+        """
+        marker_names = None if marker_name is None else [marker_name]
+        return self.make_elements_thin([element_name], marker_names, observe_after)[0]
+
+    def make_elements_thin(
+        self,
+        element_names: list[str],
+        marker_names: list[str] | None = None,
+        observe_after: bool = True,
+        require_kind: str | None = None,
+    ) -> list[str]:
+        """
+        Make many elements thin with a single ``sequence:replace`` call.
+
+        Each replacement inherits from the original element (preserving its kind
         and attributes) but with ``l = 0`` and ``at`` pinned to the original
         element's centre position, so the optics at the thin element match those
         at the centre of the thick original.
@@ -321,50 +345,77 @@ loaded_sequence:select(__observed_flag__, {{pattern=_pattern}})
         focusing/bending element to zero length would silently drop its effect on
         the optics, so that case is rejected.
 
+        Everything is validated and replaced in MAD-NG in one go: replacing the
+        elements one by one costs a round trip plus a full sequence index rebuild
+        per element (O(N^2); minutes for the ~2600 FCC-ee BPMs).
+
         Args:
-            element_name: Name of the element to replace
-            marker_name: Name of the new marker
-            observe_after: Whether to observe the new marker after replacement
+            element_names: Names of the elements to replace
+            marker_names: Names of the new markers, same order as ``element_names``
+                (default: each element's own name)
+            observe_after: Whether to observe the new markers after replacement
+            require_kind: If given, every element's ``kind`` must contain this
+                text (e.g. ``"monitor"``)
 
         Returns:
-            str: The name of the marker that replaces the original element.
+            list[str]: The names of the markers that replace the original elements.
         """
-        if marker_name is None:
-            marker_name = element_name
+        if marker_names is None:
+            marker_names = list(element_names)
+        if len(marker_names) != len(element_names):
+            raise ValueError("marker_names must have one name per element name")
+        if not element_names:
+            return []
 
+        self.mad["__thin_elements"] = list(element_names)
+        self.mad["__thin_markers"] = list(marker_names)
+        self.mad["__thin_kind"] = require_kind or ""
         self.mad.send(f"""
-correct_elm = MADX['{element_name}']
-{self.py_name}:send(correct_elm)
-{self.py_name}:send({{correct_elm.k0 or 0, correct_elm.k1 or 0, correct_elm.k2 or 0}}, true)
-        """)
-        elm = self.mad.recv("correct_elm")
-        k0, k1, k2 = self.mad.recv()
-        if elm == 0:
-            raise ValueError(f"Could not find element: {element_name}")
-        nonzero = {
-            name: value
-            for name, value in (("k0", k0), ("k1", k1), ("k2", k2))
-            if abs(float(value)) > 0
-        }
-        if nonzero:
+local found, order = {{}}, {{}}
+for i, name in ipairs(__thin_elements) do
+  local elm = MADX[name]
+  if elm == nil or type(elm) == "number" then -- MADX returns 0 for an undefined name
+    {self.py_name}:send({{"missing", name}}, true)
+    return
+  end
+  found[#found + 1] = {{ elm = elm, marker = __thin_markers[i], index = loaded_sequence:index_of(elm) }}
+end
+table.sort(found, function(a, b) return a.index < b.index end) -- replace pairs new elements with selected ones in sequence order
+local new, old = {{}}, {{}}
+for i, f in ipairs(found) do
+  local elm = f.elm
+  if __thin_kind ~= "" and not tostring(elm.kind):find(__thin_kind, 1, true) then
+    {self.py_name}:send({{"kind", elm.name}}, true)
+    return
+  end
+  if (elm.k0 or 0) ~= 0 or (elm.k1 or 0) ~= 0 or (elm.k2 or 0) ~= 0 then
+    {self.py_name}:send({{"strength", elm.name}}, true)
+    return
+  end
+  new[i] = elm(f.marker) {{ l = 0, at = loaded_sequence:upos(f.index) }}
+  old[i] = elm.name
+end
+local replaced = loaded_sequence:replace(new, {{ list = old }})
+for _, elm in ipairs(new) do MADX[elm.name] = elm end ! Replace in the madx environment for later reference
+{self.py_name}:send({{"ok", replaced and #replaced or 0}}, true)
+""")
+        status, detail = self.mad.recv()
+        if status == "missing":
+            raise ValueError(f"Could not find element: {detail}")
+        if status == "kind":
+            raise ValueError(f"Element '{detail}' is not of kind '{require_kind}'")
+        if status == "strength":
             raise ValueError(
-                f"Refusing to thin '{element_name}': it has non-zero {nonzero}; "
+                f"Refusing to thin '{detail}': it has non-zero k0, k1 or k2; "
                 "collapsing a bending/focusing element to zero length would change the optics."
             )
-        self.mad.send(f"""
-local new_elm = correct_elm '{marker_name}' {{ l = 0, at = loaded_sequence:upos(correct_elm) }}
-local replaced = loaded_sequence:replace({{new_elm}}, '{element_name}')
-MADX['{marker_name}'] = new_elm ! Replace in the madx environment for later reference
-{self.py_name}:send(replaced and #replaced or 0)
-correct_elm = nil
-        """)
-        if (n_replaced := self.mad.recv()) != 1:
+        if detail != len(element_names):
             raise ValueError(
-                f"Element replacement failed, replaced {n_replaced} elements instead of 1"
+                f"Element replacement failed, replaced {detail} elements instead of {len(element_names)}"
             )
         if observe_after:
-            self.observe_element(marker_name)
-        return marker_name
+            self.observe_elements(marker_names, unobserve_first=False)
+        return marker_names
 
     def insert_acd_markers(self) -> tuple[str, str]:
         """Insert thin monitor endpoints immediately before and after the AC-dipole element.

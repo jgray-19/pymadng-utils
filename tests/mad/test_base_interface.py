@@ -292,6 +292,56 @@ def test_make_element_thin_missing_element_raises(
         loaded_interface.make_element_thin("NOT_AN_ELEMENT")
 
 
+def test_make_elements_thin_matches_single_calls(
+    loaded_interface: AcceleratorMadInterface,
+) -> None:
+    """Thinning several elements in one call gives each the same result as thinning it alone."""
+    interface = loaded_interface
+    names = ["S.DS.L1.B1", "E.DS.R1.B1"]
+    before = [get_marker_and_element_positions(interface, n, n) for n in names]
+
+    assert interface.make_elements_thin(names) == names
+
+    for name, (position, index, _, _) in zip(names, before, strict=True):
+        after = get_marker_and_element_positions(interface, name, name)
+        assert after[0] == position
+        assert after[1] == index
+        interface.mad.send(f"py:send(loaded_sequence['{name}'].l)")
+        assert interface.mad.recv() == 0
+
+
+def test_make_elements_thin_custom_markers_and_unordered_input(
+    loaded_interface: AcceleratorMadInterface,
+) -> None:
+    """Markers are paired with their own element even when the names are not in sequence order."""
+    interface = loaded_interface
+    names = ["E.DS.R1.B1", "S.DS.L1.B1"]  # reverse sequence order
+    markers = ["MarkerE", "MarkerS"]
+    index_before = [
+        get_marker_and_element_positions(interface, n, n)[1] for n in names
+    ]
+
+    assert interface.make_elements_thin(names, markers) == markers
+
+    for marker, index in zip(markers, index_before, strict=True):
+        assert get_marker_and_element_positions(interface, marker, marker)[1] == index
+
+
+def test_make_elements_thin_required_kind(
+    loaded_interface: AcceleratorMadInterface,
+) -> None:
+    """``require_kind`` rejects elements of another kind and leaves the sequence untouched."""
+    with pytest.raises(ValueError, match="is not of kind 'nonexistent_kind'"):
+        loaded_interface.make_elements_thin(["S.DS.L1.B1"], require_kind="nonexistent_kind")
+
+
+def test_make_elements_thin_missing_element_raises(
+    loaded_interface: AcceleratorMadInterface,
+) -> None:
+    with pytest.raises(ValueError, match=r"Could not find element: NOT_AN_ELEMENT"):
+        loaded_interface.make_elements_thin(["S.DS.L1.B1", "NOT_AN_ELEMENT"])
+
+
 def test_insert_acd_markers(
     loaded_interface: AcceleratorMadInterface,
 ) -> None:

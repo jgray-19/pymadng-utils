@@ -17,6 +17,11 @@ class Accelerator(ABC):
     BPM pattern.
     """
 
+    #: MAD-X ``rbarc`` option used when loading the sequence (rbend length is the straight chord if True).
+    RBARC = False
+    #: Set MAD-NG's ``option.nocharge`` before the beam is created.
+    NOCHARGE = False
+
     def __init__(
         self,
         sequence_file: Path | str,
