@@ -48,7 +48,7 @@ For ``beam=2`` ``seq_dir`` is mandatory: ``-1`` runs the MAD-X beam-2 sequence b
 Machine descriptors
 -------------------
 
-``LHC`` requires ``beam=1`` or ``beam=2``. Its defaults are 6800 GeV kinetic energy, the ``^BPM.*$`` observation pattern, the operational tune knobs selected by ``tune_knobs_suffix="_op"``, and integer tunes ``(62, 60)``. ``FCC`` is the FCC-ee LCC single ring (``mode`` z/w/h/t, electron by default). ``PSB`` accepts rings 1--4 and defaults to 0.160 GeV; it can infer the ring from a sequence filename containing ``psbN``, otherwise ``ring=`` is required. There is no SPS runtime descriptor. ``FCC`` has no AC dipole.
+``LHC`` requires ``beam=1`` or ``beam=2``. Its defaults are 6800 GeV kinetic energy, the ``^BPM.*$`` observation pattern, the operational tune knobs selected by ``tune_knobs_suffix="_op"``, and integer tunes ``(62, 60)``. ``FCC`` is the FCC-ee LCC single ring (``mode`` z/w/h/t, electron by default). ``PSB`` accepts rings 1--4 and defaults to 0.160 GeV; it can infer the ring from a sequence filename containing ``psbN``, otherwise ``ring=`` is required. ``FCC`` has no tune knobs and no AC dipole (`match_tunes` and AC-dipole calls raise ``NotImplementedError``); integer tunes are known only for mode z.
 
 Interface classes
 -----------------
@@ -124,13 +124,12 @@ Export a reusable MAD-X sequence
 
 The directory must contain ``job.create_model_nominal.madx`` with an explicit, unambiguous ``use, sequence=...;`` statement:
 
-* ``lhcb1`` or ``lhcb2`` for LHC;
-* ``psb1`` through ``psb4`` for PSB; or
-* ``sps`` for SPS.
+* ``lhcb1`` or ``lhcb2`` for LHC; or
+* ``psb1`` through ``psb4`` for PSB.
 
 LHC export also requires OMC3's ``! LHC year ...`` header. The helper deliberately raises for missing or ambiguous metadata instead of guessing from a directory name.
 
-``seq_outdir`` selects another output directory. ``beam4=True`` is valid only for LHC beam 2. ``post_optics_madx_files`` is available for LHC and SPS, but not PSB.
+``seq_outdir`` selects another output directory. ``beam4=True`` is valid only for LHC beam 2. ``post_optics_madx_files`` is available for LHC, but not PSB.
 
 Regenerate model tables with MAD-NG
 -----------------------------------

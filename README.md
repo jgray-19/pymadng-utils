@@ -87,7 +87,7 @@ The convenience `pt=` argument is mutually exclusive with explicit `X0=` and `de
 
 The [usage guide](https://github.com/jgray-19/pymadng-utils/blob/main/docs/usage.rst) documents the rest in full: the LHC and PSB
 descriptors, the four MAD-NG interface classes and their operations, saved-sequence
-export from an OMC3 model directory (LHC, PSB, SPS), model-table regeneration, the
+export from an OMC3 model directory (LHC, PSB), model-table regeneration, the
 packaged end-to-end LHC creator, and the TFS/knob conversion helpers. The
 [API reference](https://github.com/jgray-19/pymadng-utils/blob/main/docs/api/index.rst) documents each object from its docstrings.
 

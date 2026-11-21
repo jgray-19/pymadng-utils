@@ -9,7 +9,7 @@ Scope
 -----
 
 * Runtime MAD-NG descriptors and interfaces: LHC, PSB and FCC-ee.
-* OMC3 model-directory sequence export: LHC, PSB, and SPS.
+* OMC3 model-directory sequence export: LHC and PSB.
 * Packaged end-to-end model creation: LHC (``create_lhc_model``), PSB (``create_psb_model``) and FCC-ee lattice preparation (``create_fcc_model``).
 
 Python 3.11 or newer is required. Model creation and sequence export (``pymadng_utils.madx.make_sequence`` and ``pymadng_utils.model_creator.create_models``) require the optional ``model`` dependencies and working MAD-X/OMC3 installations; everything else needs only the core install.

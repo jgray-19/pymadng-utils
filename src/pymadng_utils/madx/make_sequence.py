@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 from cpymad.madx import Madx
 from omc3.model.accelerators.lhc import Lhc
-from omc3.model.accelerators.sps import Sps
 from omc3.model.constants import JOB_MODEL_MADX_NOMINAL
 from omc3.model.model_creators.manager import CreatorType, get_model_creator_class
 
@@ -58,15 +57,13 @@ def _detect_accelerator_from_model_dir(model_dir: Path) -> str:
     job_text = _read_nominal_job_text(model_dir)
     if _LHC_USE_SEQUENCE_RE.search(job_text):
         return "lhc"
-    if re.search(r"use\s*,\s*sequence\s*=\s*sps\b", job_text, re.IGNORECASE):
-        return "sps"
     if _PSB_USE_SEQUENCE_RE.search(job_text):
         return "psb"
 
     raise ValueError(
         f"Could not infer accelerator type from model directory: {model_dir}. "
         "Expected the nominal MAD-X job file to contain an explicit "
-        "`use, sequence=...;` statement for LHC, SPS, or PSB."
+        "`use, sequence=...;` statement for LHC or PSB."
     )
 
 
@@ -200,15 +197,11 @@ def _make_psb_sequence(
 def _load_nominal_creator_from_model_dir(
     model_dir: Path,
 ) -> tuple[ModelCreator, str, int | None]:
-    """Load OMC3 nominal creator from an existing LHC or SPS model directory."""
+    """Load OMC3 nominal creator from an existing LHC model directory."""
     accelerator = _detect_accelerator_from_model_dir(model_dir)
-    if accelerator == "lhc":
-        beam = _detect_lhc_beam_from_model_dir(model_dir)
-        year = _detect_lhc_year_from_model_dir(model_dir)
-        accel = Lhc(model_dir=model_dir, beam=beam, year=year)
-    else:
-        beam = None
-        accel = Sps(model_dir=model_dir)
+    beam = _detect_lhc_beam_from_model_dir(model_dir)
+    year = _detect_lhc_year_from_model_dir(model_dir)
+    accel = Lhc(model_dir=model_dir, beam=beam, year=year)
 
     creator_class = get_model_creator_class(accel, CreatorType.NOMINAL)  # ty:ignore[invalid-argument-type]
     creator = creator_class(accel)
@@ -225,7 +218,7 @@ def make_madx_sequence(
 ) -> Path:
     """Generate and save a matched MAD-X sequence file from a model folder.
 
-    - Supports LHC, SPS, and PSB model directories
+    - Supports LHC and PSB model directories
     - Uses the existing PSB nominal job file and stops after tune matching
     - Optionally injects post-optics modifiers for creator-backed accelerators
     - Saves the resulting sequence to ``seq_outdir`` or the model directory
