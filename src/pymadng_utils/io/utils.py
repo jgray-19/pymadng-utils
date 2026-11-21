@@ -15,10 +15,11 @@ def read_knobs(file_path: str | Path) -> dict[str, float]:
     Read knob strengths from a tab-delimited file.
 
     Args:
-        path: Path to the file where each line is "knob_name\tstrength".
+        file_path: File where each line is "knob_name\tstrength"; lines without exactly two
+            tab-separated fields are skipped.
 
     Returns:
-        A dictionary mapping knob names to their true float strengths.
+        A dictionary mapping knob names to their float strengths.
     """
     path = Path(file_path)
     logger.info(f"Reading knobs from {path}")
@@ -36,11 +37,11 @@ def read_knobs(file_path: str | Path) -> dict[str, float]:
 
 def save_knobs(knobs: dict[str, float], filepath: Path) -> None:
     """
-    Save matched tunes to file.
+    Write knob strengths to a tab-separated file, one "knob_name\tstrength" line per knob.
 
     Args:
-        matched_tunes: Dictionary of tune knobs and values
-        filepath: Path to save file
+        knobs: Dictionary of knob names and values
+        filepath: Path of the file to write
     """
     logger.info(f"Saving {len(knobs)} knobs to {filepath}")
     with filepath.open("w") as f:

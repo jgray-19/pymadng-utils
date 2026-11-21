@@ -13,14 +13,23 @@ Typical workflow
 Notes
 -----
 
-* ``create_lhc_model`` is the packaged end-to-end workflow for LHC.
-* PSB tests currently call ``omc3.model_creator.create_instance_and_model()`` directly and then use the MAD-X and MAD-NG helper layers from this package.
+* ``create_lhc_model`` and ``create_psb_model`` are the packaged end-to-end workflows.
+* ``create_fcc_model`` only rewrites the FCC-ee MAD-X text; it needs neither MAD-X nor OMC3.
+* ``create_models`` imports ``omc3`` and needs the ``model`` extra.
 * Sequence generation intentionally expects a real nominal OMC3 job file and now raises on ambiguous layouts instead of guessing from directory names.
 
 Create models
 -------------
 
 .. automodule:: pymadng_utils.model_creator.create_models
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+FCC-ee lattice preparation
+--------------------------
+
+.. automodule:: pymadng_utils.model_creator.create_fcc_model
    :members:
    :undoc-members:
    :show-inheritance:

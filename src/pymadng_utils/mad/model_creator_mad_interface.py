@@ -1,3 +1,5 @@
+"""MAD-NG interface that matches tunes and exports the model twiss tables."""
+
 from __future__ import annotations
 
 import logging
@@ -36,6 +38,16 @@ class ModelCreatorMadInterface(AcceleratorMadInterface):
         deltap: float = 0.0,
         **mad_kwargs,
     ):
+        """Load the sequence and match the model tunes at ``deltap``.
+
+        Args:
+            accelerator: Accelerator configuration object
+            model_dir: Model directory; the tables are written here
+            tunes: Natural fractional tunes to match (default: from ``model_dir/twiss.dat``)
+            drv_tunes: Driven fractional tunes; ``None`` leaves the AC dipole out
+            deltap: Momentum deviation ``dp/p`` of the model
+            **mad_kwargs: Keyword arguments passed to pymadng.MAD()
+        """
         super().__init__(accelerator=accelerator, **mad_kwargs)
         self.model_dir = model_dir
         self.deltap = float(deltap)
@@ -43,14 +55,11 @@ class ModelCreatorMadInterface(AcceleratorMadInterface):
             # Just in case the twiss is madng based, it will be lowercase, not capitalised
             twiss = tfs.read(model_dir / "twiss.dat")
             headers = {key.lower(): value for key, value in twiss.headers.items()}
-            tunes = [headers["q1"]%1, headers["q2"]%1]
+            tunes = [headers["q1"] % 1, headers["q2"] % 1]
 
         self.tunes = tunes
-        self.setup_sequence()
 
-        LOGGER.info(
-            f"Initialized MAD-NG model for sequence {self.accelerator.seq_name}"
-        )
+        LOGGER.info(f"Initialized MAD-NG model for sequence {self.accelerator.seq_name}")
         self.match_model_tunes()
         self.drv_tunes = drv_tunes
 
@@ -94,12 +103,19 @@ local tbl = twiss {{sequence=loaded_sequence, deltap={self.deltap:.16e}}};
         LOGGER.info(f"{log_msg}: Q1={q1:.6f}, Q2={q2:.6f}")
         return q1, q2
 
-    def compute_and_export_twiss_tables(self, export_madx_names = True) -> None:
-        """Compute twiss tables and export model files."""
+    def compute_and_export_twiss_tables(self, export_madx_names=True) -> None:
+        """Write ``twiss_elements.dat``, ``twiss.dat`` and ``twiss_ac.dat`` into the model dir.
+
+        ``twiss_ac.dat`` is the twiss with the AC dipole installed; without ``drv_tunes`` it
+        repeats the natural twiss.
+
+        Args:
+            export_madx_names: Use MAD-X column names (``betx`` ...) instead of MAD-NG's.
+        """
         self.mad.send(f"""
-hnams = py:recv()
-cols = py:recv()
-str_cols = py:recv()
+hnams = {self.py_name}:recv()
+cols = {self.py_name}:recv()
+str_cols = {self.py_name}:recv()
 
 cols = MAD.utility.tblcat(cols, str_cols)
 twiss_elements = twiss {{ sequence=loaded_sequence, coupling=true, deltap={self.deltap:.16e} }}
@@ -143,12 +159,3 @@ twiss_ac:write("{self.model_dir / "twiss_ac.dat"}", cols, hnams)
         LOGGER.info(
             f"Successfully exported AC dipole twiss table to {self.model_dir / 'twiss_ac.dat'}"
         )
-
-    def __enter__(self) -> ModelCreatorMadInterface:
-        """Enter the MAD-NG context manager."""
-        return self
-
-    def close(self) -> None:
-        """Close the MAD-NG interface."""
-        if self.mad is not None:
-            self.mad.close()

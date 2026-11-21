@@ -1,19 +1,41 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pymadng-utils"
-version = "0.1.0"
+version = "0.0.1"
 description = "MAD-NG and pymadng utility interfaces and tests"
 readme = "README.md"
+authors = [
+    { name = "Joshua Gray" },
+]
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["MAD-NG", "MAD-X", "accelerator", "optics", "LHC", "PSB", "FCC-ee"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Physics",
+]
 requires-python = ">=3.11"
 dependencies = [
     "numpy",
     "pandas",
     "tfs-pandas",
-    "pymadng>=0.3.0",
+    "pymadng>=0.10.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/jgray-19/pymadng-utils"
+Documentation = "https://jgray-19.github.io/pymadng-utils/"
+Issues = "https://github.com/jgray-19/pymadng-utils/issues"
+Changelog = "https://github.com/jgray-19/pymadng-utils/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 test = [
@@ -26,9 +48,13 @@ model = [
     "cpymad",
     "omc3",
 ]
+dev = [
+    "pre-commit>=4,<5",
+    "ruff>=0.13,<0.14",
+]
 docs = [
-    "sphinx>=8,<9",
-    "sphinx-rtd-theme>=3,<4",
+    "sphinx>=8",
+    "furo>=2025.12.19",
 ]
 
 [tool.setuptools]
@@ -39,12 +65,13 @@ where = ["src"]
 include = ["pymadng_utils*"]
 
 [tool.setuptools.package-data]
-pymadng_utils = ["mad_scripts/*.mad"]
+pymadng_utils = ["mad_scripts/*.mad", "py.typed"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "src/pymadng_utils/physics.py"]
 norecursedirs = ["tests/data"]
 addopts = [
+    "--doctest-modules",
     "--log-cli-level=INFO",
     "--log-level=INFO",
     "--log-cli-format=%(levelname)s %(name)s %(message)s",
@@ -56,3 +83,12 @@ source = ["src"]
 
 [tool.coverage.report]
 omit = ["tests/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["tests/data", "build", "scratch_tmp"]
+
+[tool.ruff.lint]
+extend-select = ["I", "B", "UP", "RUF", "TC"]
+ignore = ["E501"]

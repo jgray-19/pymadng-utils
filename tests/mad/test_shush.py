@@ -10,20 +10,21 @@ captured process output, since fd-level muting cannot be observed any other way.
 from __future__ import annotations
 
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pymadng_utils.accelerators import LHC
 from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 BEFORE = "SHUSH_VISIBLE_BEFORE"
 MUTED = "SHUSH_MUTED_LINE"
 AFTER = "SHUSH_VISIBLE_AFTER"
 
 
-def _capture_mad_output(
-    seq_b1: Path, drive: Callable[[AcceleratorMadInterface], None]
-) -> str:
+def _capture_mad_output(seq_b1: Path, drive: Callable[[AcceleratorMadInterface], None]) -> str:
     """Run *drive* against an interface whose MAD process stdout goes to a file.
 
     Returns the full captured MAD-NG output text after the interface is closed.

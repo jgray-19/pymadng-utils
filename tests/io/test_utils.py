@@ -42,9 +42,7 @@ class TestReadKnobs:
             ("knob1\t1.0\ninvalid_line\nknob2\t2.0\n", {"knob1": 1.0, "knob2": 2.0}),
         ],
     )
-    def test_read_knobs(
-        self, temp_file: Path, content: str, expected: dict[str, float]
-    ) -> None:
+    def test_read_knobs(self, temp_file: Path, content: str, expected: dict[str, float]) -> None:
         """Test reading knobs from files."""
         temp_file.write_text(content)
         result = read_knobs(str(temp_file))

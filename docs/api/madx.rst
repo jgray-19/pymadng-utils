@@ -11,6 +11,8 @@ The main entry point in this package area is ``make_madx_sequence()``, which exp
 
 That behaviour is deliberate and matches the committed test fixtures and supported workflows in this repository.
 
+``pymadng_utils.madx`` exports only the TFS conversion helpers, so it imports with the core install. ``make_sequence`` imports ``cpymad`` and ``omc3`` (the ``model`` extra) and is imported explicitly: ``from pymadng_utils.madx.make_sequence import make_madx_sequence``.
+
 Package exports
 ---------------
 

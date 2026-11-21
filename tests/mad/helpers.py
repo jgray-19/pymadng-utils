@@ -35,9 +35,7 @@ def cleanup_interface(interface: Any) -> None:
         del interface
 
 
-def check_sequence_loaded(
-    interface: AcceleratorMadInterface, seq_name: str = "lhcb1"
-) -> None:
+def check_sequence_loaded(interface: AcceleratorMadInterface, seq_name: str = "lhcb1") -> None:
     """Check that sequence is loaded correctly."""
     assert seq_name == interface.mad.SEQ_NAME
     assert interface.mad.loaded_sequence is not None
@@ -61,8 +59,7 @@ def check_beam_setup(
         )
         assert np.isclose(
             kinetic_energy,
-            interface.mad.loaded_sequence.beam.energy
-            - interface.mad.loaded_sequence.beam.mass,
+            interface.mad.loaded_sequence.beam.energy - interface.mad.loaded_sequence.beam.mass,
             rtol=1e-10,
         )
     assert charge == interface.mad.loaded_sequence.beam.charge

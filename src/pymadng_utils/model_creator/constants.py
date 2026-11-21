@@ -1,3 +1,5 @@
+"""Column, header and strength names of the exported model twiss tables."""
+
 # Model data columns and headers
 MODEL_STRENGTHS = [
     "k1l",

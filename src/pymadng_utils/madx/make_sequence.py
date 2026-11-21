@@ -35,9 +35,7 @@ def _read_nominal_job_text(model_dir: Path) -> str:
     """Return the nominal OMC3 MAD-X job file contents."""
     job_file = model_dir / JOB_MODEL_MADX_NOMINAL
     if not job_file.exists():
-        raise FileNotFoundError(
-            f"Expected nominal MAD-X job file not found: {job_file}"
-        )
+        raise FileNotFoundError(f"Expected nominal MAD-X job file not found: {job_file}")
     return job_file.read_text(errors="ignore")
 
 
@@ -177,8 +175,7 @@ def _make_psb_sequence(
     # The script takes everything up to the end of the match block.
     madx_script = _extract_psb_script(job_text)
     save_script = (
-        "set, format='-16.16e';\n"
-        f"save, sequence=psb{ring}, file='saved_madx.seq', noexpr=false;\n"
+        f"set, format='-16.16e';\nsave, sequence=psb{ring}, file='saved_madx.seq', noexpr=false;\n"
     )
 
     with Madx(stdout=False) as madx:
@@ -189,9 +186,7 @@ def _make_psb_sequence(
 
     saved_seq = seq_outdir / "saved_madx.seq"
     if not saved_seq.exists():
-        raise FileNotFoundError(
-            f"Expected saved sequence file not produced by MAD-X: {saved_seq}"
-        )
+        raise FileNotFoundError(f"Expected saved sequence file not produced by MAD-X: {saved_seq}")
 
     seq_path = seq_outdir / f"psb{ring}_saved.seq"
     if saved_seq.resolve() != seq_path.resolve():
@@ -253,9 +248,7 @@ def make_madx_sequence(
             )
 
         seq_path, ring = _make_psb_sequence(model_dir, seq_outdir=outdir)
-        LOGGER.info(
-            "Saved MAD-X sequence for accelerator PSB ring %d to %s", ring, seq_path
-        )
+        LOGGER.info("Saved MAD-X sequence for accelerator PSB ring %d to %s", ring, seq_path)
         return seq_path
 
     creator, accelerator, beam = _load_nominal_creator_from_model_dir(model_dir)
@@ -263,14 +256,10 @@ def make_madx_sequence(
     madx_script = creator.get_base_madx_script()
     if beam4:
         if accelerator != "lhc" or beam != 2:
-            raise ValueError(
-                "beam4 sequence adaptation is only supported for LHC beam 2."
-            )
+            raise ValueError("beam4 sequence adaptation is only supported for LHC beam 2.")
         creator_energy = creator.accel.energy
         if creator_energy is None:
-            raise ValueError(
-                "Could not determine beam energy from model creator accelerator."
-            )
+            raise ValueError("Could not determine beam energy from model creator accelerator.")
 
         madx_script = _adapt_script_to_beam4(madx_script, beam, float(creator_energy))
 

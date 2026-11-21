@@ -38,7 +38,6 @@ def test_model_creator_init_requires_existing_sequence(tmp_path: Path) -> None:
     """The interface should fail fast when the saved sequence file is missing."""
     missing_file = tmp_path / "missing.seq"
 
-
     with pytest.raises(FileNotFoundError, match="Sequence file not found"):
         ModelCreatorMadInterface(
             model_dir=tmp_path,
@@ -65,10 +64,7 @@ def test_model_creator_init_loads_sequence_and_beam(
 def test_model_creator_repr_and_str_use_default_interface_behaviour(
     model_interface: ModelCreatorMadInterface,
 ) -> None:
-    assert (
-        repr(model_interface)
-        == "ModelCreatorMadInterface(seq_name='lhcb1', py_name='py')"
-    )
+    assert repr(model_interface) == "ModelCreatorMadInterface(seq_name='lhcb1', py_name='py')"
     assert str(model_interface) == "ModelCreatorMadInterface(lhcb1)"
 
 

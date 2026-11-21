@@ -1,4 +1,4 @@
-"""Beam-physics helpers matching MAD-NG conventions. Using pretty much identical code to MAD-NG"""
+"""Particle masses and ``dp/p`` <-> ``pt`` conversions, following MAD-NG's definitions."""
 
 from __future__ import annotations
 
@@ -38,7 +38,11 @@ def particle_mass(particle: str) -> float:
 
 
 def beta_from_energy(energy: float, particle: str = "proton") -> float:
-    """Compute relativistic beta from total energy [GeV] and particle name."""
+    """Compute relativistic beta from total energy [GeV] and particle name.
+
+    >>> round(beta_from_energy(0.93827208816 + 0.160), 6)  # PSB flat bottom
+    0.519753
+    """
     mass = particle_mass(particle)
     if mass == 0.0:
         return 1.0
@@ -58,6 +62,9 @@ def dp2pt(dp: float, beta0: float = 1.0) -> float:
     ~3 significant digits for small ``dp`` (relative error up to ~1e-12). The
     rewritten numerator ``2*dp + dp^2`` carries no cancellation, giving
     machine-precision accuracy.
+
+    >>> round(dp2pt(1e-3, beta0=0.519753), 8)
+    0.00051994
     """
     dp = float(dp)
     if dp == 0.0:
@@ -75,6 +82,9 @@ def pt2dp(pt: float, beta0: float = 1.0) -> float:
     small ``pt`` (it is ``sqrt(1 + small) - 1``), whereas the rewritten
     numerator ``2*pt/beta0 + pt^2`` has no cancellation and stays accurate to
     machine precision.
+
+    >>> round(pt2dp(dp2pt(1e-3, 0.519753), 0.519753), 12)
+    0.001
     """
     pt = float(pt)
     if pt == 0.0:

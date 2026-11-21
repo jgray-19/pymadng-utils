@@ -18,9 +18,7 @@ PSB_DRV_TUNES = (0.162, 0.232)
 
 
 @pytest.fixture(scope="module")
-def psb_model_dir(
-    tmp_path_factory: pytest.TempPathFactory, acc_models_psb_path: Path
-) -> Path:
+def psb_model_dir(tmp_path_factory: pytest.TempPathFactory, acc_models_psb_path: Path) -> Path:
     """Create a full PSB model from the committed minimal PSB acc-models snapshot."""
     model_dir = tmp_path_factory.mktemp("psb_model") / "ring3_model"
     create_psb_model(
@@ -93,9 +91,7 @@ def test_create_psb_model_with_explicit_acd(
 
     twiss = tfs.read(psb_model_dir_with_acd / "twiss.dat", index="NAME")
     twiss_ac = tfs.read(psb_model_dir_with_acd / "twiss_ac.dat", index="NAME")
-    twiss_elements = tfs.read(
-        psb_model_dir_with_acd / "twiss_elements.dat", index="NAME"
-    )
+    twiss_elements = tfs.read(psb_model_dir_with_acd / "twiss_elements.dat", index="NAME")
 
     assert abs(twiss.headers["Q1"] % 1 - PSB_NAT_TUNES[0]) < 1e-6
     assert abs(twiss.headers["Q2"] % 1 - PSB_NAT_TUNES[1]) < 1e-6
@@ -104,8 +100,6 @@ def test_create_psb_model_with_explicit_acd(
     assert install_marker in twiss_elements.index
     assert "HACMAP" in twiss_elements.index
     assert "VACMAP" in twiss_elements.index
-
-
 
 
 def test_psb_saved_sequence_loads_in_madng(psb_model_dir: Path) -> None:

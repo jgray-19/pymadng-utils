@@ -63,7 +63,5 @@ def test_dp2pt_matches_high_precision_reference() -> None:
     beta0 = 0.52
     dp = 1e-4
     inv_beta0 = Decimal(1) / Decimal(str(beta0))
-    exact = float(
-        ((Decimal(1) + Decimal(str(dp))) ** 2 + (inv_beta0**2 - 1)).sqrt() - inv_beta0
-    )
+    exact = float(((Decimal(1) + Decimal(str(dp))) ** 2 + (inv_beta0**2 - 1)).sqrt() - inv_beta0)
     assert dp2pt(dp, beta0) == pytest.approx(exact, rel=1e-15, abs=1e-18)

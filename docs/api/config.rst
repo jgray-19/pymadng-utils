@@ -1,7 +1,7 @@
 Configuration
 =============
 
-``pymadng_utils.config`` locates the packaged MAD-NG output-suppression script and retains the package's proton-mass constant. Most users should use the particle and momentum helpers in :doc:`physics` instead.
+``pymadng_utils.config`` holds the package directory and the paths of the packaged MAD-NG scripts: the output-suppression script and the ``match_tunes`` script. Most users never need it.
 
 .. automodule:: pymadng_utils.config
    :members:

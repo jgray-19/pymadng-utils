@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from pymadng_utils.accelerators import LHC
 
 if TYPE_CHECKING:
@@ -22,6 +24,7 @@ def test_lhc_repr_and_str_use_default_accelerator_behaviour(seq_b1: Path) -> Non
         "LHC("
         "beam=1, "
         "tune_knobs_suffix='_op', "
+        "seq_dir=1, "
         f"sequence_file={seq_b1!r}, "
         "kinetic_energy=6800.0, "
         "particle='proton', "
@@ -31,6 +34,13 @@ def test_lhc_repr_and_str_use_default_accelerator_behaviour(seq_b1: Path) -> Non
         ")"
     )
     assert str(accel) == (
-        f"LHC(seq_name=lhcb1, particle=proton, kinetic_energy=6800 GeV, "
-        f"sequence_file={seq_b1})"
+        f"LHC(seq_name=lhcb1, particle=proton, kinetic_energy=6800 GeV, sequence_file={seq_b1})"
     )
+
+
+def test_lhc_beam2_requires_explicit_sequence_direction(seq_b1: Path) -> None:
+    assert LHC(beam=1, sequence_file=seq_b1).seq_dir == 1
+    with pytest.raises(ValueError, match="seq_dir"):
+        LHC(beam=2, sequence_file=seq_b1)
+    assert LHC(beam=2, sequence_file=seq_b1, seq_dir=-1).seq_dir == -1
+    assert LHC(beam=2, sequence_file=seq_b1, seq_dir=1).seq_dir == 1

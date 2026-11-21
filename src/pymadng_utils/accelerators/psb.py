@@ -58,12 +58,7 @@ class PSB(Accelerator):
     @property
     def ac_dipole_name(self) -> str:
         """Return the PSB AC-dipole installation element."""
-        # return f"BR{self.ring}.DES3L1"
-        return "HACMAP"  # This assumes we have installed the marker in the sequence, which is what we do in the model creation workflow.
-
-    # def get_exciter_bpm(self) -> tuple[str, str]:
-    #     """Return the two BPMs adjacent to the PSB exciter."""
-    #     return f"BR{self.ring}.BPM3L3", f"BR{self.ring}.BPM4L3"
+        return "HACMAP"  # marker installed by the model-creation workflow
 
     @property
     def tune_variables(self) -> tuple[str, str]:
@@ -77,10 +72,8 @@ class PSB(Accelerator):
 
     @staticmethod
     def infer_monitor_plane(bpm_name: str) -> str:
-        """Infer measurement plane from PSB monitor names."""
+        """Return ``"HV"`` (both planes) for a PSB monitor name; raise for other names."""
         name = bpm_name.upper()
         if any(token in name for token in (".BPM", ".BWS", ".BPP", ".BPT")):
             return "HV"
-        raise ValueError(
-            f"Unsupported PSB monitor name for plane inference: {bpm_name}"
-        )
+        raise ValueError(f"Unsupported PSB monitor name for plane inference: {bpm_name}")

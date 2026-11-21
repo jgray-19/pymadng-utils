@@ -16,19 +16,29 @@ _BPM_MARKER = re.compile(r"^(?P<name>bpm_[\w.]+):\s*marker\b")
 _SEXTUPOLE = re.compile(r"^(?P<head>\w[\w.]*:\s*sextupole\b[^;]*?),\s*at=")
 _SEQUENCE_START = re.compile(r"^\w+\s*:\s*sequence\b", re.IGNORECASE)
 
-#: Variable that drives the kick of corrector ``name``.
+
 def kick_variable(name: str) -> str:
+    """Return the variable that drives the kick of corrector ``name``."""
     return f"k_{name}"
 
 
 def bpms_to_monitors(madx_text: str) -> str:
     """Declare the ``bpm_*`` markers as ``monitor`` (what the MAD-NG fitter expects of a BPM)."""
-    return "\n".join(_BPM_MARKER.sub(r"\g<name>: monitor", line) for line in madx_text.splitlines()) + "\n"
+    return (
+        "\n".join(_BPM_MARKER.sub(r"\g<name>: monitor", line) for line in madx_text.splitlines())
+        + "\n"
+    )
 
 
 def slice_sextupoles(madx_text: str, nslice: int = 3) -> str:
     """Give every sextupole ``nslice`` MAD-NG slices (a single slice is too coarse for the FCC-ee sextupoles)."""
-    return "\n".join(_SEXTUPOLE.sub(rf"\g<head>, nslice={nslice}, at=", line) for line in madx_text.splitlines()) + "\n"
+    return (
+        "\n".join(
+            _SEXTUPOLE.sub(rf"\g<head>, nslice={nslice}, at=", line)
+            for line in madx_text.splitlines()
+        )
+        + "\n"
+    )
 
 
 def defer_correctors(madx_text: str) -> tuple[str, dict[str, str]]:
@@ -56,7 +66,9 @@ def defer_correctors(madx_text: str) -> tuple[str, dict[str, str]]:
     return "\n".join([*lines[:start], *declarations, *lines[start:]]) + "\n", variables
 
 
-def create_fcc_model(lattice_dir: Path | str, output_file: Path | str, *, madx_name: str = "fccee_z.madx") -> dict[str, str]:
+def create_fcc_model(
+    lattice_dir: Path | str, output_file: Path | str, *, madx_name: str = "fccee_z.madx"
+) -> dict[str, str]:
     """Write ``output_file``: ``lattice_dir/madx_name`` with deferred corrector kicks, monitor BPMs and 3-slice sextupoles.
 
     Returns ``{corrector name: kick variable}``.

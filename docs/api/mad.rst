@@ -6,8 +6,9 @@ MAD-NG Interfaces
 Overview
 --------
 
-* ``AcceleratorMadInterface`` exposes sequence loading, beam setup, variable management, marker installation, TWISS execution, magnet perturbations, and orbit correction.
+* ``AcceleratorMadInterface`` exposes sequence loading, beam setup, variable management, marker installation, TWISS execution, magnet perturbations, tune matching, AC-dipole and AC-kicker installation, and orbit correction.
 * ``AcceleratorErrorsMadInterface`` is the opt-in variant that applies accelerator-defined startup errors after loading the sequence.
+* ``pymadng_utils.mad.ac_kickers`` installs and drives thin flattop AC kickers.
 * ``KnobMadInterface`` adds helpers for applying corrector tables and knob files.
 * ``ModelCreatorMadInterface`` specialises the interface stack for model-export workflows.
 
@@ -41,6 +42,13 @@ Core interface
 .. automodule:: pymadng_utils.mad.accelerator_mad_interface
    :members:
    :undoc-members:
+   :show-inheritance:
+
+AC kickers
+----------
+
+.. automodule:: pymadng_utils.mad.ac_kickers
+   :members:
    :show-inheritance:
 
 Knob helpers

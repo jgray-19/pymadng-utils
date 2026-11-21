@@ -34,6 +34,7 @@ def seq_b1(data_dir: Path) -> Path:
     """Path to the example sequence file for beam 1 used by several tests."""
     return data_dir / "sequences" / "lhcb1.seq"
 
+
 @pytest.fixture(scope="session")
 def lhc_b1(seq_b1: Path) -> LHC:
     """Reusable LHC accelerator descriptor for beam 1 tests."""

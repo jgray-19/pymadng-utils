@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 def resolve_knobs(knobs: Mapping[str, float] | str | Path) -> dict[str, float]:
     """Knob name/value pairs, whether given directly or as a file to read.
 
@@ -54,9 +55,7 @@ class KnobMadInterface(AcceleratorMadInterface):
             if kind in mappings:
                 for attr, col in mappings[kind]:
                     if col in row.index:
-                        self.mad.send(
-                            f"loaded_sequence['{ename}'].{attr} = {self.py_name}:recv()"
-                        )
+                        self.mad.send(f"loaded_sequence['{ename}'].{attr} = {self.py_name}:recv()")
                         self.mad.send(row[col])
                     else:
                         logger.warning(
@@ -78,9 +77,7 @@ class KnobMadInterface(AcceleratorMadInterface):
             self.unobserve_elements(bad_bpms)
             logger.debug(f"Set up observation for bad BPMs: {bad_bpms}")
 
-    def set_corrector_strengths(
-        self, corrector_knobs: Mapping[str, float] | str | Path
-    ) -> None:
+    def set_corrector_strengths(self, corrector_knobs: Mapping[str, float] | str | Path) -> None:
         """Apply corrector settings, given as knobs or as a corrector table file.
 
         A mapping is a set of MAD-X knob variables and is sent as such. A path is
@@ -88,6 +85,7 @@ class KnobMadInterface(AcceleratorMadInterface):
         applied element by element, anything else is parsed as a knobs file.
         The two are different data shapes, not two spellings of one, so the
         format is decided by reading -- never by catching a failure to apply.
+        A path that does not exist logs a warning and changes nothing.
         """
         if isinstance(corrector_knobs, str | Path):
             path = Path(corrector_knobs)
@@ -98,7 +96,8 @@ class KnobMadInterface(AcceleratorMadInterface):
             if corrector_table is not None:
                 self._apply_changed_correctors(corrector_table, source=str(path))
                 self.mad.send(f"{self.py_name}:send(true)")
-                assert self.mad.recv(), "Failed to set corrector strengths"
+                if not self.mad.recv():
+                    raise RuntimeError("Failed to set corrector strengths")
                 return
 
         knobs = resolve_knobs(corrector_knobs)
@@ -107,7 +106,8 @@ class KnobMadInterface(AcceleratorMadInterface):
         logger.info(f"Set {len(knobs)} corrector knobs")
 
         self.mad.send(f"{self.py_name}:send(true)")
-        assert self.mad.recv(), "Failed to set corrector strengths"
+        if not self.mad.recv():
+            raise RuntimeError("Failed to set corrector strengths")
 
     @staticmethod
     def _read_corrector_table(path: Path) -> pd.DataFrame | None:
@@ -117,9 +117,7 @@ class KnobMadInterface(AcceleratorMadInterface):
         try:
             table = tfs.read(path)
         except (tfs.TfsFormatError, UnboundLocalError, ValueError) as error:
-            logger.debug(
-                f"{path} is not a TFS corrector table ({error}); reading as knobs"
-            )
+            logger.debug(f"{path} is not a TFS corrector table ({error}); reading as knobs")
             return None
         required = {"ename", "kind", "hkick", "hkick_old", "vkick", "vkick_old"}
         missing = required.difference(table.columns)
@@ -130,16 +128,12 @@ class KnobMadInterface(AcceleratorMadInterface):
             )
         return table
 
-    def _apply_changed_correctors(
-        self, corrector_table: pd.DataFrame, *, source: str
-    ) -> None:
+    def _apply_changed_correctors(self, corrector_table: pd.DataFrame, *, source: str) -> None:
         non_monitors = corrector_table[corrector_table["kind"] != "monitor"]
         changed = (non_monitors["hkick"] != non_monitors["hkick_old"]) | (
             non_monitors["vkick"] != non_monitors["vkick_old"]
         )
-        logger.info(
-            f"Applying {changed.sum()} non-zero corrector strengths from {source}"
-        )
+        logger.info(f"Applying {changed.sum()} non-zero corrector strengths from {source}")
         self.apply_corrector_strengths(non_monitors[changed])
 
     def set_knobs(self, tune_knobs: Mapping[str, float] | str | Path) -> None:
@@ -152,7 +146,8 @@ class KnobMadInterface(AcceleratorMadInterface):
             self.mad.send(f"MADX['{name}'] = {val}")
 
         self.mad.send(f"{self.py_name}:send(true)")
-        assert self.mad.recv(), "Failed to set knobs"
+        if not self.mad.recv():
+            raise RuntimeError("Failed to set knobs")
 
         logger.debug(f"Previous knob values: {prev}")
         logger.debug(f"Set {len(knobs)} knobs")

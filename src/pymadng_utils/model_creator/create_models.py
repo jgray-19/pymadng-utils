@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Script to create LHC model directories for beam 1 and beam 2 at 18cm optics using omc3.
 
@@ -8,6 +7,7 @@ This script orchestrates the complete model creation workflow:
 3. Updates model with MAD-NG (tune matching, twiss computation)
 4. Exports TFS files in MAD-X format
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,6 +18,7 @@ from omc3.model_creator import create_instance_and_model
 from pymadng_utils.accelerators import LHC, PSB, PSB_FLAT_BOTTOM_GEV
 from pymadng_utils.madx.make_sequence import make_madx_sequence
 from pymadng_utils.model_creator.madng_utils import update_model_with_madng
+from pymadng_utils.physics import PROTON_MASS_GEV
 
 if TYPE_CHECKING:
     import pathlib
@@ -32,8 +33,8 @@ def create_lhc_model(
     *,
     fetch: str = "afs",
     path: str | None = None,
-    nat_tunes: list[float] = [0.28, 0.31],
-    drv_tunes: list[float] | None = [0.27, 0.322],
+    nat_tunes: tuple[float, float] = (0.28, 0.31),
+    drv_tunes: tuple[float, float] | None = (0.27, 0.322),
     energy: float = 6800.0,
     modifiers: str | list[str] | None = None,
 ) -> None:
@@ -42,30 +43,24 @@ def create_lhc_model(
 
     This function performs the full workflow:
     1. Creates model instance using omc3
-    2. Generates MAD-X sequence files (including beam4 for tracking if beam=2)
+    2. Exports the MAD-X sequence ``lhcb<beam>_saved.seq`` (for beam 2 this is the forward
+       beam-4 tracking sequence, so ``seq_dir=1`` is used for the MAD-NG ``LHC`` descriptor)
     3. Updates model with MAD-NG (tune matching and twiss computation)
 
-    Parameters
-    ----------
-    beam : int
-        Beam number (1 or 2).
-    output_dir : pathlib.Path
-        Directory where model files will be created.
-    year : str
-        LHC year/era.
-    nat_tunes : list[float], optional
-        Natural fractional tunes [Q1, Q2]. Defaults to config values.
-    drv_tunes : list[float], optional
-        Driven fractional tunes [Q1, Q2]. Defaults to config values.
-    energy : float, optional
-        Beam energy in GeV. Defaults to config value.
-    modifier : str, optional
-        Optics modifier file name. Defaults to config value.
+    Args:
+        beam: Beam number (1 or 2).
+        output_dir: Directory where model files will be created.
+        year: LHC optics year.
+        fetch: omc3 ``fetch`` method; ``path`` is required unless it is ``"afs"``.
+        path: omc3 accelerator-model path for non-AFS fetch methods.
+        nat_tunes: Natural fractional tunes [Q1, Q2].
+        drv_tunes: Driven fractional tunes [Q1, Q2]; ``None`` skips the AC dipole.
+        energy: Total beam energy in GeV (omc3 and MAD-X ``beam, energy=`` convention); the
+            MAD-NG ``LHC`` descriptor gets ``energy - PROTON_MASS_GEV`` as kinetic energy.
+        modifiers: omc3 optics modifier files.
 
-    Raises
-    ------
-    ValueError
-        If beam is not 1 or 2.
+    Raises:
+        ValueError: If beam is not 1 or 2.
     """
     if beam not in (1, 2):
         raise ValueError(f"Beam must be 1 or 2, got {beam}")
@@ -79,7 +74,8 @@ def create_lhc_model(
     accelerator = LHC(
         beam=beam,
         sequence_file=output_dir / f"lhcb{beam}_saved.seq",
-        kinetic_energy=energy,
+        kinetic_energy=energy - PROTON_MASS_GEV,
+        seq_dir=1,  # beam 2 is exported as the forward beam-4 sequence (see make_madx_sequence)
     )
 
     LOGGER.info(f"\n{'=' * 70}")
@@ -88,7 +84,7 @@ def create_lhc_model(
     LOGGER.info(f"Output directory: {output_dir}")
     LOGGER.info(f"Natural tunes: {nat_tunes}")
     LOGGER.info(f"Driven tunes: {drv_tunes}")
-    LOGGER.info(f"Energy: {energy} GeV")
+    LOGGER.info(f"Total energy: {energy} GeV")
     LOGGER.info(f"Year: {year}")
     LOGGER.info(f"Modifiers: {modifiers}")
     LOGGER.info(f"{'=' * 70}\n")
@@ -98,7 +94,7 @@ def create_lhc_model(
 
     # Step 1: Create base model with omc3
     LOGGER.info("Step 1: Creating base model with omc3...")
-    create_drv_tunes = [0.0, 0.0] if drv_tunes is None else drv_tunes
+    create_drv_tunes = (0.0, 0.0) if drv_tunes is None else drv_tunes
     LOGGER.debug("Model fetch path: %s", path)
     create_instance_and_model(
         accel="lhc",
@@ -109,8 +105,8 @@ def create_lhc_model(
         year=year,
         driven_excitation="acd",
         energy=energy,
-        nat_tunes=nat_tunes,
-        drv_tunes=create_drv_tunes,
+        nat_tunes=list(nat_tunes),
+        drv_tunes=list(create_drv_tunes),
         modifiers=modifiers,
         outputdir=output_dir,
     )
@@ -123,9 +119,7 @@ def create_lhc_model(
 
     # Step 3: Update with MAD-NG
     LOGGER.info("Step 3: Updating model with MAD-NG...")
-    update_model_with_madng(
-        accelerator, output_dir, tunes=nat_tunes, drv_tunes=drv_tunes
-    )
+    update_model_with_madng(accelerator, output_dir, tunes=nat_tunes, drv_tunes=drv_tunes)
     LOGGER.info("✓ Model update complete\n")
 
     LOGGER.info(f"{'=' * 70}")
@@ -141,8 +135,8 @@ def create_psb_model(
     *,
     fetch: str = "afs",
     path: str | None = None,
-    nat_tunes: list[float] = [0.17, 0.225],
-    drv_tunes: list[float] | None = None,
+    nat_tunes: tuple[float, float] = (0.17, 0.225),
+    drv_tunes: tuple[float, float] | None = None,
     kinetic_energy: float = PSB_FLAT_BOTTOM_GEV,
     dpp: float = 0.0,
     cycle_point: str = "1_flat_bottom",
@@ -166,33 +160,23 @@ def create_psb_model(
     them skip the redundant first pass rather than computing (and discarding)
     a Twiss twice.
 
-    Parameters
-    ----------
-    ring : int
-        PSB ring number (1, 2, 3, or 4).
-    output_dir : pathlib.Path
-        Directory where model files will be created.
-    year : str
-        Scenario year/era.
-    nat_tunes : list[float], optional
-        Natural fractional tunes [Q1, Q2]. Defaults to config values.
-    drv_tunes : list[float], optional
-        Driven fractional tunes [Q1, Q2]. ``None`` skips the AC dipole excitation.
-    kinetic_energy : float, optional
-        Kinetic energy in GeV. Defaults to config value.
-    dpp : float, optional
-        Relative momentum deviation the model is built/twissed at.
-    cycle_point : str, optional
-        PSB cycle point. Defaults to config value.
-    str_file : str, optional
-        Strength file name. Defaults to config value.
-    scenario : str, optional
-        omc3 scenario name. Defaults to config value.
+    Args:
+        ring: PSB ring number (1, 2, 3, or 4).
+        output_dir: Directory where model files will be created.
+        year: Scenario year/era.
+        fetch: omc3 ``fetch`` method; ``path`` is required unless it is ``"afs"``.
+        path: omc3 accelerator-model path for non-AFS fetch methods.
+        nat_tunes: Natural fractional tunes [Q1, Q2].
+        drv_tunes: Driven fractional tunes [Q1, Q2]. ``None`` skips the AC dipole excitation.
+        kinetic_energy: Kinetic energy in GeV.
+        dpp: Relative momentum deviation the model is built/twissed at.
+        cycle_point: PSB cycle point.
+        str_file: Strength file name.
+        scenario: omc3 scenario name.
+        update_with_madng: Run the MAD-NG update (step 3); see above.
 
-    Raises
-    ------
-    ValueError
-        If ring is not 1, 2, 3, or 4.
+    Raises:
+        ValueError: If ring is not 1, 2, 3, or 4.
     """
     if ring not in (1, 2, 3, 4):
         raise ValueError(f"Ring must be 1, 2, 3, or 4, got {ring}")
@@ -226,7 +210,7 @@ def create_psb_model(
         "outputdir": output_dir,
         "accel": "psbooster",
         "type": "nominal",
-        "nat_tunes": nat_tunes,
+        "nat_tunes": list(nat_tunes),
         "dpp": dpp,
         "fetch": fetch,
         "path": path,
@@ -239,7 +223,7 @@ def create_psb_model(
         "show_help": False,
     }
     if drv_tunes is not None:
-        model_kwargs["drv_tunes"] = drv_tunes
+        model_kwargs["drv_tunes"] = list(drv_tunes)
         model_kwargs["driven_excitation"] = "acd"
     create_instance_and_model(**model_kwargs)
     LOGGER.info("✓ Base model created\n")

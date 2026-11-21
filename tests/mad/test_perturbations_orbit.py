@@ -24,9 +24,7 @@ def lhc_interface(seq_b1):
     interface.close()
 
 
-def _get_element_attr(
-    interface: AcceleratorMadInterface, element_name: str, attr: str
-) -> float:
+def _get_element_attr(interface: AcceleratorMadInterface, element_name: str, attr: str) -> float:
     return float(interface.mad.loaded_sequence[element_name][attr])
 
 
@@ -88,6 +86,20 @@ def test_lhc_quadrupole_perturbation_modes(
     assert _get_perturbation_knob_name(table_family_quad, "k1") in magnet_strengths
     if expect_non_table_changed:
         assert _get_perturbation_knob_name(non_table_quad, "k1") in magnet_strengths
+
+
+def test_default_perturbation_uses_family_error_table(
+    lhc_interface: AcceleratorMadInterface,
+) -> None:
+    """Without ``rel_error`` only table quadrupoles are perturbed."""
+    non_table_quad = "MQT.12R2.B1"
+    before = _get_effective_strength(lhc_interface, non_table_quad, "k1")
+
+    magnet_strengths, _ = lhc_interface.apply_magnet_perturbations(seed=42, magnet_type="q")
+
+    assert _get_effective_strength(lhc_interface, non_table_quad, "k1") == before
+    assert _get_perturbation_knob_name("MQY.B5L2.B1", "k1") in magnet_strengths
+    assert _get_perturbation_knob_name(non_table_quad, "k1") not in magnet_strengths
 
 
 def test_set_magnet_strengths_absolute_roundtrips_through_dknl(
@@ -198,12 +210,8 @@ def test_quadrupole_knob_updates_use_dknl(
     knob_name = "MQ.13R2.B1.dk1l"
     element_name = knob_name.removesuffix(".dk1l")
     absolute_name = f"{element_name}.k1"
-    initial_strength_base = lhc_interface.get_base_magnet_strengths([absolute_name])[
-        absolute_name
-    ]
-    initial_strength = lhc_interface.get_magnet_strengths([absolute_name])[
-        absolute_name
-    ]
+    initial_strength_base = lhc_interface.get_base_magnet_strengths([absolute_name])[absolute_name]
+    initial_strength = lhc_interface.get_magnet_strengths([absolute_name])[absolute_name]
     assert np.isclose(initial_strength, initial_strength_base)
     initial_k1 = float(lhc_interface.mad.loaded_sequence[element_name].k1)
     length = float(lhc_interface.mad.loaded_sequence[element_name].l)
@@ -214,12 +222,8 @@ def test_quadrupole_knob_updates_use_dknl(
     step = 1e-4
     lhc_interface.set_magnet_strengths({knob_name: step})
 
-    updated_strength = lhc_interface.get_magnet_strengths([absolute_name])[
-        absolute_name
-    ]
-    updated_strength_base = lhc_interface.get_base_magnet_strengths([absolute_name])[
-        absolute_name
-    ]
+    updated_strength = lhc_interface.get_magnet_strengths([absolute_name])[absolute_name]
+    updated_strength_base = lhc_interface.get_base_magnet_strengths([absolute_name])[absolute_name]
     updated_k1 = float(lhc_interface.mad.loaded_sequence[element_name].k1)
     updated_dknl = float(lhc_interface.mad.loaded_sequence[element_name].dknl[1])
 
@@ -235,9 +239,7 @@ def test_quadrupole_knob_updates_use_dknl(
 
     lhc_interface.set_magnet_strengths({absolute_name: initial_strength_base})
     final_strength = lhc_interface.get_magnet_strengths([absolute_name])[absolute_name]
-    final_strength_base = lhc_interface.get_base_magnet_strengths([absolute_name])[
-        absolute_name
-    ]
+    final_strength_base = lhc_interface.get_base_magnet_strengths([absolute_name])[absolute_name]
     final_k1 = float(lhc_interface.mad.loaded_sequence[element_name].k1)
     final_dknl = float(lhc_interface.mad.loaded_sequence[element_name].dknl[1])
     assert np.isclose(final_strength, initial_strength_base)

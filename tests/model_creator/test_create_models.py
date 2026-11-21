@@ -5,6 +5,7 @@ import tfs
 from pymadng_utils.accelerators import LHC
 from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
 from pymadng_utils.model_creator.create_models import create_lhc_model
+from pymadng_utils.physics import PROTON_MASS_GEV
 
 
 @pytest.fixture
@@ -18,13 +19,12 @@ def test_create_lhc_models(beam, temp_model_dir, acc_models_path):
     """Test creating LHC model for the specified beam, mimicking main()."""
     # Create model for the specified beam
     nat_tunes = [0.28, 0.31]
+    total_energy = 6800.0
     optics_label = "18cm"
     year = "2025"
     modifiers = "R2025aRP_A18cmC18cmA10mL200cm_Flat.madx"
 
-    model_dir = (
-        temp_model_dir / f"model_b{beam}__t{nat_tunes[0]}_{nat_tunes[1]}_{optics_label}"
-    )
+    model_dir = temp_model_dir / f"model_b{beam}__t{nat_tunes[0]}_{nat_tunes[1]}_{optics_label}"
     drv_tunes = [0.27, 0.322]
     create_lhc_model(
         beam=beam,
@@ -35,6 +35,7 @@ def test_create_lhc_models(beam, temp_model_dir, acc_models_path):
         path=acc_models_path,
         nat_tunes=nat_tunes,
         drv_tunes=drv_tunes,
+        energy=total_energy,
     )
 
     # Check that directory is created
@@ -67,10 +68,11 @@ def test_create_lhc_models(beam, temp_model_dir, acc_models_path):
         f"Beam {beam} driven Q2 mismatch: expected {drv_tunes[1]}, got {twiss_acd_file.headers['Q2']}"
     )
 
+    # The MAD-NG model is at the requested total energy, as in the MAD-X job
+    assert abs(twiss_file.headers["ENERGY"] - total_energy) < 1e-9
+
     # Origin should be from MAD, not MADX
-    assert "MAD" in twiss_file.headers.get("ORIGIN", ""), (
-        f"Beam {beam} twiss origin should be MAD"
-    )
+    assert "MAD" in twiss_file.headers.get("ORIGIN", ""), f"Beam {beam} twiss origin should be MAD"
     assert "MADX" not in twiss_file.headers.get("ORIGIN", ""), (
         f"Beam {beam} twiss origin should not be MADX"
     )
@@ -78,7 +80,12 @@ def test_create_lhc_models(beam, temp_model_dir, acc_models_path):
     # Test loading sequence and running twiss with MadCoreInterface
     sequence_file = model_dir / f"lhcb{beam}_saved.seq"
     mad = AcceleratorMadInterface(
-        accelerator=LHC(beam=beam, sequence_file=sequence_file, kinetic_energy=6800.0)
+        accelerator=LHC(
+            beam=beam,
+            sequence_file=sequence_file,
+            kinetic_energy=total_energy - PROTON_MASS_GEV,
+            seq_dir=1,
+        )
     )
 
     # Run twiss

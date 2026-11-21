@@ -4,23 +4,24 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any  # noqa: F401 — used in __init__ signature
+from typing import Any
 
 from pymadng_utils.physics import beta_from_energy, dp2pt, particle_mass, pt2dp
 
 
 class Accelerator(ABC):
-    """Small accelerator descriptor modelled on ``aba_optimiser``.
+    """Machine descriptor consumed by the MAD-NG interfaces.
 
-    The repository only needs the machine-specific fields that the MAD-NG ACD
-    driver consumes directly: sequence path, MAD sequence name, beam energy and
-    BPM pattern.
+    Holds the sequence path, MAD sequence name, beam energy, BPM pattern, tune knobs and
+    integer tunes, and the AC-dipole element name.
     """
 
     #: MAD-X ``rbarc`` option used when loading the sequence (rbend length is the straight chord if True).
     RBARC = False
     #: Set MAD-NG's ``option.nocharge`` before the beam is created.
     NOCHARGE = False
+    #: MAD-NG ``sequence.dir``: -1 runs the loaded sequence backwards.
+    seq_dir = 1
 
     def __init__(
         self,
@@ -30,7 +31,8 @@ class Accelerator(ABC):
         particle: str = "proton",
         **kwargs: Any,
     ) -> None:
-        assert not kwargs, f"Unexpected keyword arguments: {list(kwargs)}"
+        if kwargs:
+            raise TypeError(f"Unexpected keyword arguments: {list(kwargs)}")
         super().__init__()
         self.sequence_file = Path(sequence_file)
         self.kinetic_energy = float(kinetic_energy)
@@ -42,9 +44,7 @@ class Accelerator(ABC):
     def __repr__(self) -> str:
         """Return a developer-facing representation of public accelerator state."""
         fields = ", ".join(
-            f"{name}={value!r}"
-            for name, value in vars(self).items()
-            if not name.startswith("_")
+            f"{name}={value!r}" for name, value in vars(self).items() if not name.startswith("_")
         )
         return f"{type(self).__name__}({fields})"
 
@@ -73,13 +73,11 @@ class Accelerator(ABC):
         Returns:
             Sequence name to use in MAD
         """
-        pass
 
     @property
     @abstractmethod
     def ac_dipole_name(self) -> str:
-        """Return the AC-dipole exciter marker and the offset from the marker for installation."""
-        pass
+        """Return the name of the AC-dipole element."""
 
     def acd_marker_name(self, side: str) -> str:
         """Return a stable row name for the AC-dipole marker state."""
@@ -96,12 +94,6 @@ class Accelerator(ABC):
         """Return the unobserved centre marker used to cycle kicker-mode tracking."""
         return f"{kicker_name}_centre"
 
-    # @property
-    # @abstractmethod
-    # def get_exciter_bpm(self) -> tuple[str, str]:
-    #     """Return the two BPM names adjacent to the exciter."""
-    #     pass
-
     def apply_accelerator_specific_errors(self, mad_iface: Any) -> None:
         """Apply machine-specific startup errors to a loaded MAD sequence."""
         del mad_iface
@@ -113,11 +105,9 @@ class Accelerator(ABC):
     @property
     @abstractmethod
     def tune_variables(self) -> tuple[str, str]:
-        """Return PSB tune variable names."""
-        pass
+        """Return the MAD-X tune knob names (qx, qy)."""
 
     @property
     @abstractmethod
     def tune_integers(self) -> tuple[int, int]:
-        """Return PSB integer tunes."""
-        pass
+        """Return the integer parts of the tunes (qx, qy)."""

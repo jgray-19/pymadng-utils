@@ -8,24 +8,24 @@ import tfs
 
 LOGGER = logging.getLogger(__name__)
 
+
 def convert_tfs_to_madx(tfs_df: pd.DataFrame, remove_drifts=True) -> pd.DataFrame:
     """
     Convert TFS DataFrame from MAD-NG format to MAD-X format.
 
     This function performs the following transformations:
-    - Converts all column names and header keys to uppercase
-    - Renames phase advance columns: 'MU1' → 'MUX', 'MU2' → 'MUY'
-    - Renames drift elements to consecutive numbering (DRIFT_0, DRIFT_1, ...)
+    - Drops every column whose name is not lowercase (MAD-NG's extra columns)
+    - Converts the remaining column names and all header keys to uppercase
+    - Renames phase advance columns: 'MU1' → 'MUX', 'MU2' → 'MUY' (keeps existing MUX/MUY)
+    - If ``remove_drifts``, renames the elements of kind ``drift`` whose name starts with
+      "drift" to consecutive DRIFT_0, DRIFT_1, ...
     - Sets 'NAME' as index and removes special rows ('$start', '$end')
 
-    Parameters
-    ----------
-    tfs_df : pd.DataFrame
-        Input TFS DataFrame in MAD-NG format.
+    Args:
+        tfs_df: Input TFS DataFrame in MAD-NG format.
+        remove_drifts: Renumber the drift elements as described above.
 
-    Returns
-    -------
-    tfs.TfsDataFrame
+    Returns:
         Converted TFS DataFrame in MAD-X format.
     """
     # Reset the index to manipulate columns
@@ -45,7 +45,7 @@ def convert_tfs_to_madx(tfs_df: pd.DataFrame, remove_drifts=True) -> pd.DataFram
     # (e.g. a hybrid xsuite twiss carrying both 'mux'/'muy' and 'mu1'/'mu2'),
     # keep them and drop MU1/MU2 to avoid duplicate columns; otherwise rename.
     if "MUX" in tfs_df.columns:
-        tfs_df = tfs_df.drop(columns=["MU1", "MU2"])
+        tfs_df = tfs_df.drop(columns=["MU1", "MU2"], errors="ignore")
     else:
         tfs_df = tfs_df.rename(columns={"MU1": "MUX", "MU2": "MUY"})
 
@@ -56,7 +56,7 @@ def convert_tfs_to_madx(tfs_df: pd.DataFrame, remove_drifts=True) -> pd.DataFram
         ]
         if not drifts.empty:
             new_drift_names = [f"DRIFT_{i}" for i in range(len(drifts))]
-            tfs_df.loc[tfs_df["KIND"] == "drift", "NAME"] = new_drift_names
+            tfs_df.loc[drifts.index, "NAME"] = new_drift_names
 
     # Set NAME as index and filter out special markers
     tfs_df = tfs_df.set_index("NAME")
@@ -70,15 +70,11 @@ def export_tfs_to_madx(tfs_file: Path) -> None:
     This is a convenience function that reads a TFS file, applies the
     MAD-NG to MAD-X conversion, and writes it back.
 
-    Parameters
-    ----------
-    tfs_file : Path
-        Path to the TFS file to convert.
+    Args:
+        tfs_file: Path to the TFS file to convert.
 
-    Raises
-    ------
-    FileNotFoundError
-        If the TFS file doesn't exist.
+    Raises:
+        FileNotFoundError: If the TFS file doesn't exist.
     """
     if not tfs_file.exists():
         raise FileNotFoundError(f"TFS file not found: {tfs_file}")
@@ -94,10 +90,8 @@ def convert_multiple_tfs_files(tfs_files: list[Path]) -> None:
     """
     Convert multiple TFS files to MAD-X format.
 
-    Parameters
-    ----------
-    tfs_files : list[Path]
-        List of TFS file paths to convert.
+    Args:
+        tfs_files: List of TFS file paths to convert.
     """
     for tfs_file in tfs_files:
         export_tfs_to_madx(tfs_file)

@@ -1,0 +1,30 @@
+-- match_tunes(knobs, X0, deltap, targets, info): match the two tunes of loaded_sequence by
+-- varying the MADX variables `knobs` = {qx_knob, qy_knob} to the total tunes `targets`.
+-- The knobs are TPSA parameters during the match, so one twiss gives dQ/dknob exactly
+-- (trkopt mu*_<knob> at $end): about 3 twiss calls instead of ~7 finite-difference ones.
+local damap, twiss, match in MAD
+local par2vec in MAD.gphys
+
+function match_tunes(knobs, X0, deltap, targets, info)
+  local map = damap { nv=6, np=2, mo=2, po=1, pn=knobs }
+  map:set0(par2vec(X0))
+  for _, k in ipairs(knobs) do MADX[k] = MADX[k] + map[k] end
+  local ok, err = pcall(match, {
+    command := twiss { sequence=loaded_sequence, method=6, observe=0, X0=map, deltap=deltap,
+                       trkopt={ "mu1_1", "mu1_01", "mu2_1", "mu2_01" } },
+    jacobian = \t, _, J =>
+      local r = t[#t]
+      assert(r.name == "$end", "match_tunes: $end must be observed")
+      J:set(1, 1, r.mu1_1) J:set(1, 2, r.mu1_01) J:set(2, 1, r.mu2_1) J:set(2, 2, r.mu2_01)
+    end,
+    variables = { {var="MADX." .. knobs[1], name=knobs[1]},
+                  {var="MADX." .. knobs[2], name=knobs[2]} },
+    equalities = { {expr=\t -> t.q1 - targets[1], name="q1"},
+                   {expr=\t -> t.q2 - targets[2], name="q2"} },
+    objective = { fmin=1e-8 },
+    info = info,
+  })
+  -- Always strip the TPSA parameters from the knobs, even when the match failed.
+  for _, k in ipairs(knobs) do MADX[k] = MADX[k]:get0() end
+  if not ok then error(err) end
+end

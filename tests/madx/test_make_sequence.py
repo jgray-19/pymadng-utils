@@ -41,7 +41,10 @@ def test_detect_lhc_beam_no_longer_guesses_from_directory_name(
         "use, sequence=lhcb1;\nuse, sequence=lhcb2;\n",
     )
 
-    with pytest.raises(ValueError, match="Expected exactly one explicit `use, sequence=lhcb1;` or `use, sequence=lhcb2;` statement"):
+    with pytest.raises(
+        ValueError,
+        match="Expected exactly one explicit `use, sequence=lhcb1;` or `use, sequence=lhcb2;` statement",
+    ):
         _detect_lhc_beam_from_model_dir(model_dir)
 
 
@@ -54,5 +57,7 @@ def test_detect_psb_ring_no_longer_guesses_from_directory_name(
         "call, file='psb.seq';\nuse, sequence=psb1;\nuse, sequence=psb3;\nENDMATCH;\n",
     )
 
-    with pytest.raises(ValueError, match="Expected exactly one explicit `use, sequence=psbN;` statement"):
+    with pytest.raises(
+        ValueError, match="Expected exactly one explicit `use, sequence=psbN;` statement"
+    ):
         _detect_psb_ring_from_model_dir(model_dir)

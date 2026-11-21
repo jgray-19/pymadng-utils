@@ -7,7 +7,7 @@ from .accelerator_mad_interface import (
 from .knob_mad_interface import KnobMadInterface
 
 __all__ = [
-    "AcceleratorMadInterface",
     "AcceleratorErrorsMadInterface",
+    "AcceleratorMadInterface",
     "KnobMadInterface",
 ]

@@ -37,7 +37,8 @@ def update_model_with_madng(
     Args:
         accelerator: Accelerator configuration object
         model_dir: Directory where model files are located and will be updated
-        tunes: Target fractional tunes [Q1, Q2] to match in the model
+        tunes: Target fractional tunes [Q1, Q2] to match in the model (default: the
+            fractional tunes in the existing ``twiss.dat`` header)
         drv_tunes: Optional target driven tunes [Q1, Q2] for tracking mode
         deltap: Relative momentum deviation used for tune matching and exported twiss tables
         convert_to_madx: Whether to convert TFS files to MAD-X format after export

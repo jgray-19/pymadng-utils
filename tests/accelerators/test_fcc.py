@@ -24,6 +24,6 @@ def test_fcc_rejects_unknown_mode(tmp_path):
 def test_fcc_has_no_tune_knobs_or_ac_dipole(tmp_path):
     acc = FCC(sequence_file=tmp_path / "x.madx")
     with pytest.raises(NotImplementedError):
-        acc.tune_variables
+        _ = acc.tune_variables
     with pytest.raises(NotImplementedError):
-        acc.ac_dipole_name
+        _ = acc.ac_dipole_name

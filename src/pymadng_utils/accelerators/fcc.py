@@ -65,7 +65,9 @@ class FCC(Accelerator):
         super().__init__(
             sequence_file=sequence_file,
             kinetic_energy=(
-                FCC_ENERGY_GEV[mode] - particle_mass(particle) if kinetic_energy is None else kinetic_energy
+                FCC_ENERGY_GEV[mode] - particle_mass(particle)
+                if kinetic_energy is None
+                else kinetic_energy
             ),
             bpm_pattern=bpm_pattern,
             particle=particle,
@@ -86,7 +88,9 @@ class FCC(Accelerator):
     def tune_integers(self) -> tuple[int, int]:
         """Return the integer tunes (Z lattice)."""
         if self.mode != "z":
-            raise NotImplementedError(f"Integer tunes are only known for the Z lattice, not {self.mode!r}")
+            raise NotImplementedError(
+                f"Integer tunes are only known for the Z lattice, not {self.mode!r}"
+            )
         return FCC_Z_TUNE_INTEGERS
 
     @property

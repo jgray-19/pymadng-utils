@@ -48,7 +48,7 @@ py:send(count)
     assert bpm_count > 0, "No BPMs were observed"
 
     # Test observe_bpms with bad BPMs
-    knob_interface_with_beam.unobserve_elements(["BPM"])
+    knob_interface_with_beam.unobserve("BPM")
     knob_interface_with_beam.observe_bpms("BPM", bad_bpms=["BPM.1L1.B1"])
     # Should still have observed BPMs (minus the bad ones if they existed)
     knob_interface_with_beam.mad.send("""
@@ -75,9 +75,7 @@ def test_resolve_knobs_returns_a_copy_of_mapping() -> None:
 
 
 @pytest.mark.parametrize("as_path", [False, True])
-def test_resolve_knobs_reads_knob_file(
-    tmp_path: Path, as_path: bool
-) -> None:
+def test_resolve_knobs_reads_knob_file(tmp_path: Path, as_path: bool) -> None:
     """String and Path inputs should both be read as knob files."""
     knob_file = tmp_path / "knobs.txt"
     knob_file.write_text("dqx_b1_op\t1.250000e-03\ndqy_b1_op\t-2.500000e-03\n")
@@ -101,18 +99,18 @@ def test_apply_corrector_strengths_updates_kickers(
 
     knob_interface_with_beam.apply_corrector_strengths(correctors)
 
-    assert knob_interface_with_beam.mad.loaded_sequence[
-        "MCBYH.B5L2.B1"
-    ].kick == pytest.approx(1.25e-6)
-    assert knob_interface_with_beam.mad.loaded_sequence[
-        "MCBYV.5L2.B1"
-    ].kick == pytest.approx(-2.5e-6)
-    assert knob_interface_with_beam.mad.loaded_sequence[
-        "MKI.D5L2.B1"
-    ].hkick == pytest.approx(3.5e-6)
-    assert knob_interface_with_beam.mad.loaded_sequence[
-        "MKI.D5L2.B1"
-    ].vkick == pytest.approx(-4.5e-6)
+    assert knob_interface_with_beam.mad.loaded_sequence["MCBYH.B5L2.B1"].kick == pytest.approx(
+        1.25e-6
+    )
+    assert knob_interface_with_beam.mad.loaded_sequence["MCBYV.5L2.B1"].kick == pytest.approx(
+        -2.5e-6
+    )
+    assert knob_interface_with_beam.mad.loaded_sequence["MKI.D5L2.B1"].hkick == pytest.approx(
+        3.5e-6
+    )
+    assert knob_interface_with_beam.mad.loaded_sequence["MKI.D5L2.B1"].vkick == pytest.approx(
+        -4.5e-6
+    )
 
 
 def test_apply_corrector_strengths_ignores_missing_elements(
@@ -128,9 +126,9 @@ def test_apply_corrector_strengths_ignores_missing_elements(
 
     knob_interface_with_beam.apply_corrector_strengths(correctors)
 
-    assert knob_interface_with_beam.mad.loaded_sequence[
-        "MCBYH.B5L2.B1"
-    ].kick == pytest.approx(7.5e-7)
+    assert knob_interface_with_beam.mad.loaded_sequence["MCBYH.B5L2.B1"].kick == pytest.approx(
+        7.5e-7
+    )
 
 
 def test_set_corrector_strengths_from_knob_file(
@@ -153,9 +151,7 @@ def test_set_corrector_strengths_missing_file_is_noop(
     before_qx = knob_interface_with_beam.mad.MADX.dqx_b1_op
     before_qy = knob_interface_with_beam.mad.MADX.dqy_b1_op
 
-    knob_interface_with_beam.set_corrector_strengths(
-        tmp_path / "missing_correctors.tfs"
-    )
+    knob_interface_with_beam.set_corrector_strengths(tmp_path / "missing_correctors.tfs")
 
     assert knob_interface_with_beam.mad.MADX.dqx_b1_op == before_qx
     assert knob_interface_with_beam.mad.MADX.dqy_b1_op == before_qy

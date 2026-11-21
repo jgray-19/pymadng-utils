@@ -15,6 +15,11 @@ import numpy as np
 import pytest
 
 from pymadng_utils.accelerators import LHC
+from pymadng_utils.mad.ac_kickers import (
+    bind_ac_kicker_volts,
+    set_ac_kicker_freqs,
+    shift_ac_kicker_phase,
+)
 from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
 from pymadng_utils.physics import beta_from_energy
 from pymadng_utils.physics import dp2pt as physics_dp2pt
@@ -63,9 +68,7 @@ def test_repr_and_str_are_concise(interface: AcceleratorMadInterface) -> None:
 def test_load_sequence(interface: AcceleratorMadInterface) -> None:
     """Test loading a sequence file during initialisation."""
     check_sequence_loaded(interface, "lhcb1")
-    assert (
-        interface.mad.loaded_sequence is not None and interface.mad.loaded_sequence != 0
-    )
+    assert interface.mad.loaded_sequence is not None and interface.mad.loaded_sequence != 0
     assert interface.mad.MADX.lhcb1 is not None and interface.mad.MADX.lhcb1 != 0
 
 
@@ -76,9 +79,7 @@ def test_load_sequence_unknown_sequence_raises(seq_b1: Path) -> None:
         match=r"Sequence 'does_not_exist' not found in MAD file",
     ):
         AcceleratorMadInterface(
-            accelerator=MissingSequenceLHC(
-                beam=1, sequence_file=seq_b1, kinetic_energy=6800.0
-            )
+            accelerator=MissingSequenceLHC(beam=1, sequence_file=seq_b1, kinetic_energy=6800.0)
         )
 
 
@@ -120,9 +121,7 @@ def test_interface_and_accelerator_use_matching_beta_for_dp_pt(
     """Both conversion paths should use equivalent beta values."""
     dp = 0.015
 
-    assert loaded_interface.dp2pt(dp) == pytest.approx(
-        loaded_interface.accelerator.dp2pt(dp)
-    )
+    assert loaded_interface.dp2pt(dp) == pytest.approx(loaded_interface.accelerator.dp2pt(dp))
     assert loaded_interface.pt2dp(loaded_interface.dp2pt(dp)) == pytest.approx(dp)
 
 
@@ -150,9 +149,7 @@ def test_interface_dp_pt_conversions_use_mad_ng_gphys(
     """
     interface = loaded_interface
 
-    interface.mad.send(
-        "py:send(MAD.gphys.dp2pt(py:recv(), loaded_sequence.beam.beta))"
-    ).send(dp)
+    interface.mad.send("py:send(MAD.gphys.dp2pt(py:recv(), loaded_sequence.beam.beta))").send(dp)
     expected = interface.mad.recv()
 
     assert interface.dp2pt(dp) == expected
@@ -218,9 +215,7 @@ def test_cycle_sequence_invalid_marker_raises(
     loaded_interface: AcceleratorMadInterface,
 ) -> None:
     """Cycling to a missing marker should raise the wrapped runtime error."""
-    with pytest.raises(
-        RuntimeError, match="Cycle failed - check MAD output for details"
-    ):
+    with pytest.raises(RuntimeError, match="Cycle failed - check MAD output for details"):
         loaded_interface.cycle_sequence("NOT_A_MARKER")
 
 
@@ -317,9 +312,7 @@ def test_make_elements_thin_custom_markers_and_unordered_input(
     interface = loaded_interface
     names = ["E.DS.R1.B1", "S.DS.L1.B1"]  # reverse sequence order
     markers = ["MarkerE", "MarkerS"]
-    index_before = [
-        get_marker_and_element_positions(interface, n, n)[1] for n in names
-    ]
+    index_before = [get_marker_and_element_positions(interface, n, n)[1] for n in names]
 
     assert interface.make_elements_thin(names, markers) == markers
 
@@ -355,7 +348,7 @@ def test_insert_acd_markers(
         before_position_before,
         before_index_before,
         element_position_before,
-        element_index_before,
+        _,
     ) = get_marker_and_element_positions(interface, before_name, element_name)
     after_position_before, after_index_before, _, _ = get_marker_and_element_positions(
         interface, after_name, element_name
@@ -384,10 +377,7 @@ def test_insert_acd_markers(
     assert after_index_after is not None
     assert before_position_after < after_position_after
     assert element_position_after == element_position_before
-    assert (
-        len({int(before_index_after), int(element_index_after), int(after_index_after)})
-        == 3
-    )
+    assert len({int(before_index_after), int(element_index_after), int(after_index_after)}) == 3
 
 
 def test_getset_variables(interface: AcceleratorMadInterface) -> None:
@@ -407,6 +397,7 @@ def test_set_madx_variables(interface: AcceleratorMadInterface) -> None:
     assert interface.mad.MADX.KQTL_1L1_B1 == 1.5
     assert interface.mad.MADX.kqtl_1l2_b1 == 2.5
 
+
 def test_twiss(loaded_interface_with_beam: AcceleratorMadInterface):
     """Test twiss function."""
     interface = loaded_interface_with_beam
@@ -425,9 +416,7 @@ def test_twiss(loaded_interface_with_beam: AcceleratorMadInterface):
         "dy",
     ]
     for col in expected_columns:
-        assert col in twiss_df.columns, (
-            f"Expected column {col} not found in twiss output"
-        )
+        assert col in twiss_df.columns, f"Expected column {col} not found in twiss output"
     assert "name" not in twiss_df.columns, "Column 'name' should be the index"
     assert twiss_df.index.name == "name", (
         f"Expected index name to be 'name', got {twiss_df.index.name}"
@@ -436,9 +425,7 @@ def test_twiss(loaded_interface_with_beam: AcceleratorMadInterface):
     # There should only be one entry, since by default observe = 1 and nothing has been set to be observed
     assert len(twiss_df) == 1, f"Expected 1 twiss entry, got {len(twiss_df)}"
     # Check the marker is named $end
-    assert twiss_df.index[0] == "$end", (
-        f"Expected marker name '$end', got {twiss_df.index[0]}"
-    )
+    assert twiss_df.index[0] == "$end", f"Expected marker name '$end', got {twiss_df.index[0]}"
 
     # Check the tunes
     assert abs(twiss_df.headers["q1"] - 62.28) < 3e-7, f"Unexpected Qx: {twiss_df.q1}"
@@ -448,12 +435,8 @@ def test_twiss(loaded_interface_with_beam: AcceleratorMadInterface):
     twiss_df = interface.run_twiss(observe=0)
     # There should be loads of entries now, including drifts
     assert len(twiss_df) > 1000, f"Expected >1000 twiss entries, got {len(twiss_df)}"
-    assert "drift__3" in twiss_df.index, (
-        "Expected to find drift elements in twiss output"
-    )
-    assert "MB.A33R2.B1" in twiss_df.index, (
-        "Expected to find magnet elements in twiss output"
-    )
+    assert "drift__3" in twiss_df.index, "Expected to find drift elements in twiss output"
+    assert "MB.A33R2.B1" in twiss_df.index, "Expected to find magnet elements in twiss output"
     assert abs(twiss_df.headers["q1"] - 62.28) < 3e-7, f"Unexpected Qx: {twiss_df.headers['q1']}"
     assert abs(twiss_df.headers["q2"] - 60.31) < 3e-7, f"Unexpected Qy: {twiss_df.headers['q2']}"
 
@@ -462,12 +445,11 @@ def test_twiss(loaded_interface_with_beam: AcceleratorMadInterface):
     twiss_df = interface.run_twiss()
     # There should only be BPMs observed
     assert len(twiss_df) == 563, f"Expected 563 twiss entries, got {len(twiss_df)}"
-    assert all(twiss_df.index.str.match(r"^BPM.*")), (
-        "Expected only BPM elements in twiss output"
-    )
+    assert all(twiss_df.index.str.match(r"^BPM.*")), "Expected only BPM elements in twiss output"
     assert abs(twiss_df.headers["q1"] - 62.28) < 3e-7, f"Unexpected Qx: {twiss_df.headers['q1']}"
     assert abs(twiss_df.headers["q2"] - 60.31) < 3e-7, f"Unexpected Qy: {twiss_df.headers['q2']}"
     interface.unobserve_elements(["BPM"])
+
 
 def test_twiss_pt_kwarg_is_exact_x0_injection(
     loaded_interface_with_beam: AcceleratorMadInterface,
@@ -521,9 +503,9 @@ def test_twiss_pt_and_deltap_are_the_same_code_path(
     tws_pt = interface.run_twiss(pt=pt)
 
     # MAD-NG's native deltap handling, with no interference from run_twiss
-    # beyond matching its method=6 and cotol=1e-12 defaults.
+    # beyond matching its method=6 and cotol=1e-11 defaults.
     interface.mad["tws_native", "flw_native"] = interface.mad.twiss(
-        sequence="loaded_sequence", deltap=deltap, observe=1, method=6, cotol=1e-12
+        sequence="loaded_sequence", deltap=deltap, observe=1, method=6, cotol=1e-11
     )
     tws_native = interface.mad.tws_native.to_df().set_index("name")
 
@@ -712,9 +694,7 @@ def test_install_ac_dipole_and_twiss(loaded_ac_interface_with_beam) -> None:
     drv_tunes = (0.27, 0.322)
 
     # Install AC dipole
-    interface.install_ac_dipole(
-        nat_tunes=nat_tunes, drv_tunes=drv_tunes
-    )
+    interface.install_ac_dipole(nat_tunes=nat_tunes, drv_tunes=drv_tunes)
 
     # Run twiss after AC dipole installation
     tws_ac = interface.run_twiss(observe=0)
@@ -749,6 +729,17 @@ def _run_match_tunes_capture_output(seq_b1, log_level: int) -> int:
     return len(Path(tmp_path).read_text())
 
 
+@pytest.mark.parametrize("deltap", [None, 1e-4])
+def test_match_tunes_reaches_targets(interface, deltap) -> None:
+    """match_tunes lands on the target fractional tunes, at the requested momentum."""
+    knobs = interface.match_tunes(target_qx=0.28, target_qy=0.31, deltap=deltap)
+    assert all(isinstance(value, float) for value in knobs.values())  # no TPSA left behind
+    tws = interface.run_twiss(deltap=deltap) if deltap else interface.run_twiss()
+    qx_int, qy_int = interface.accelerator.tune_integers
+    assert tws.headers["q1"] == pytest.approx(qx_int + 0.28, abs=1e-8)
+    assert tws.headers["q2"] == pytest.approx(qy_int + 0.31, abs=1e-8)
+
+
 def test_match_tunes_verbosity_scales_with_log_level(seq_b1) -> None:
     """More verbose logging levels produce more MAD-NG output during match_tunes."""
     ami_logger = logging.getLogger("pymadng_utils.mad.accelerator_mad_interface")
@@ -761,3 +752,93 @@ def test_match_tunes_verbosity_scales_with_log_level(seq_b1) -> None:
         ami_logger.setLevel(original_level)
 
     assert n_debug > n_info > n_warning
+
+
+AC_KICKS = (2e-3, 0.7e-3, -1.5e-3, 0.4e-3)  # (a_x, b_x, a_y, b_y)
+
+
+def _ac_kicker_pass(interface: AcceleratorMadInterface, before: str, after: str) -> list[float]:
+    """(dpx, dpy) of one pass on MAD turn 0, in units of 0.3 / pc."""
+    interface.mad.send(f"""
+local _, flw = track{{sequence=loaded_sequence, range="{before}/{after}",
+    X0={{x=1e-3, px=2e-5, y=-1e-3, py=-3e-5, t=0, pt=0}}, nturn=1}}
+{interface.py_name}:send({{flw[1].px, flw[1].py, loaded_sequence.beam.pc}}, true)
+""")
+    px, py, pc = interface.mad.recv()
+    return [(px - 2e-5) * pc / 0.3, (py + 3e-5) * pc / 0.3]
+
+
+def _expected_kick(kicks, freqs, turn: int) -> list[float]:
+    return [
+        kicks[2 * p] * math.sin(2 * math.pi * turn * freqs[p])
+        + kicks[2 * p + 1] * math.cos(2 * math.pi * turn * freqs[p])
+        for p in (0, 1)
+    ]
+
+
+def test_install_ac_kickers_kick(loaded_interface: AcceleratorMadInterface) -> None:
+    """A pass on turn 0 kicks by 0.3 / pc * b (sin term 0)."""
+    interface = loaded_interface
+    before, after = interface.insert_acd_markers()
+    interface.install_ac_kickers(AC_KICKS, (0.27, 0.32))
+    kick = _ac_kicker_pass(interface, before, after)
+    assert kick == pytest.approx(_expected_kick(AC_KICKS, (0.27, 0.32), 0), rel=1e-12, abs=0)
+
+
+def test_shift_ac_kicker_phase(loaded_interface: AcceleratorMadInterface) -> None:
+    """After a shift by n turns the kick is a sin(2 pi n freq) + b cos(2 pi n freq)."""
+    interface = loaded_interface
+    before, after = interface.insert_acd_markers()
+    freqs, offset = (0.27, 0.32), 5
+    interface.install_ac_kickers(AC_KICKS, freqs)
+    shift_ac_kicker_phase(interface.mad, offset)
+    kick = _ac_kicker_pass(interface, before, after)
+    assert kick == pytest.approx(_expected_kick(AC_KICKS, freqs, offset), rel=1e-12, abs=0)
+
+
+def test_set_ac_kicker_freq(loaded_interface: AcceleratorMadInterface) -> None:
+    """The freq script sets every kicker's freq per plane (seen via a 5-turn shift)."""
+    interface = loaded_interface
+    before, after = interface.insert_acd_markers()
+    interface.install_ac_kickers(AC_KICKS, (0.27, 0.32))
+    freqs, offset = (0.21, 0.19), 5
+    set_ac_kicker_freqs(interface.mad, freqs)
+    shift_ac_kicker_phase(interface.mad, offset)
+    kick = _ac_kicker_pass(interface, before, after)
+    assert kick == pytest.approx(_expected_kick(AC_KICKS, freqs, offset), rel=1e-12, abs=0)
+
+
+def test_bind_ac_kicker_volt(loaded_interface: AcceleratorMadInterface) -> None:
+    """The volt script makes each kicker's volt follow ``loaded_sequence[var]``."""
+    interface = loaded_interface
+    before, after = interface.insert_acd_markers()
+    freqs, offset = (0.27, 0.32), 3
+    interface.install_ac_kickers((0.0, 0.0, 0.0, 0.0), freqs)
+    names = ("ax", "bx", "ay", "by")
+    bind_ac_kicker_volts(interface.mad, names)
+    shift_ac_kicker_phase(interface.mad, offset)
+    sets = "; ".join(
+        f"loaded_sequence['{n}'] = {v!r}" for n, v in zip(names, AC_KICKS, strict=True)
+    )
+    interface.mad.send(sets)
+    kick = _ac_kicker_pass(interface, before, after)
+    assert kick == pytest.approx(_expected_kick(AC_KICKS, freqs, offset), rel=1e-12, abs=0)
+
+
+def test_unobserve_elements_removes_exactly_the_named_elements(
+    loaded_interface: AcceleratorMadInterface,
+) -> None:
+    """Names are exact, not Lua patterns: ``.`` must not match other characters."""
+    interface = loaded_interface
+    interface.observe()
+    interface.mad.send(
+        f"local n = 0; for _, e in loaded_sequence:iter() do if e:is_observed() then n = n + 1 end end;"
+        f" {interface.py_name}:send(n, true)"
+    )
+    before = interface.mad.recv()
+    interface.unobserve_elements(["BPM.10L1.B1", "BPM.9L1.B1"])
+    interface.mad.send(
+        f"local n = 0; for _, e in loaded_sequence:iter() do if e:is_observed() then n = n + 1 end end;"
+        f" {interface.py_name}:send(n, true)"
+    )
+    assert interface.mad.recv() == before - 2

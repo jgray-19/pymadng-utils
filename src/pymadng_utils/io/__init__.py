@@ -1,3 +1,5 @@
+"""Knob-file I/O."""
+
 from .utils import read_knobs, save_knobs
 
 __all__ = [

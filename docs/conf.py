@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from importlib.metadata import version as package_version
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,7 +11,7 @@ sys.path.insert(0, str(SRC))
 
 project = "pymadng-utils"
 author = "pymadng-utils contributors"
-release = "0.1.0"
+release = package_version("pymadng-utils")
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -39,6 +40,11 @@ autodoc_mock_imports = [
     "tfs",
 ]
 
-html_theme = "sphinx_rtd_theme"
+html_theme = "furo"
 html_static_path = ["_static"]
 html_title = "pymadng-utils"
+html_theme_options = {
+    "source_repository": "https://github.com/jgray-19/pymadng-utils/",
+    "source_branch": "main",
+    "source_directory": "docs/",
+}
