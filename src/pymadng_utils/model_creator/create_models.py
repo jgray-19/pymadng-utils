@@ -42,6 +42,7 @@ def create_lhc_model(
     Create a complete LHC model for the specified beam.
 
     This function performs the full workflow:
+
     1. Creates model instance using omc3
     2. Exports the MAD-X sequence ``lhcb<beam>_saved.seq`` (for beam 2 this is the forward
        beam-4 tracking sequence, so ``seq_dir=1`` is used for the MAD-NG ``LHC`` descriptor)
@@ -148,6 +149,7 @@ def create_psb_model(
     Create a complete PSB model for the specified ring.
 
     This function performs the full workflow:
+
     1. Creates model instance using omc3
     2. Generates MAD-X sequence files
     3. Updates model with MAD-NG (tune matching and twiss computation)

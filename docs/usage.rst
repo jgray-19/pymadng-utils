@@ -77,8 +77,9 @@ families; ``perform_orbit_correction``; ``install_ac_dipole`` and ``insert_acd_m
 
 Magnet-strength keys are ``ELEMENT.attribute``, for example ``MQ.12L1.B1.k1``,
 ``MB.A12L1.B1.dk0l`` or ``MQ.12L1.B1.dx``. Multipoles cover normal and skew orders 0--2,
-either as absolute ``kN``/``kNs`` or integrated delta ``dkNl``/``dkNsl`` values; ``dx``,
-``dy`` and ``kick`` are also accepted. Multipole changes are routed through MAD-NG's
+either as absolute ``kN``/``kNs`` or integrated delta ``dkNl``/``dkNsl`` values; the
+misalignments ``dx``, ``dy`` and ``ds`` and the direct element fields ``tilt``, ``volt``,
+``lag``, ``freq`` and ``kick`` are also accepted. Multipole changes are routed through MAD-NG's
 deferred ``dknl``/``dksl`` tables.
 
 ``KnobMadInterface`` adds ``observe_bpms(pattern, bad_bpms=...)``, which observes a BPM

@@ -14,6 +14,7 @@ def convert_tfs_to_madx(tfs_df: pd.DataFrame, remove_drifts=True) -> pd.DataFram
     Convert TFS DataFrame from MAD-NG format to MAD-X format.
 
     This function performs the following transformations:
+
     - Drops every column whose name is not lowercase (MAD-NG's extra columns)
     - Converts the remaining column names and all header keys to uppercase
     - Renames phase advance columns: 'MU1' → 'MUX', 'MU2' → 'MUY' (keeps existing MUX/MUY)

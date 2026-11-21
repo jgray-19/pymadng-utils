@@ -16,9 +16,15 @@ release = package_version("pymadng-utils")
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
+    "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
 ]
+
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "pandas": ("https://pandas.pydata.org/docs", None),
+}
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
