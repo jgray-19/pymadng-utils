@@ -1,0 +1,127 @@
+from __future__ import annotations
+
+import contextlib
+from typing import TYPE_CHECKING
+
+import pytest
+import tfs
+
+from pymadng_utils.accelerators import PSB
+from pymadng_utils.mad.accelerator_mad_interface import AcceleratorMadInterface
+from pymadng_utils.model_creator.create_models import create_psb_model
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+PSB_NAT_TUNES = (0.17, 0.225)
+PSB_DRV_TUNES = (0.162, 0.232)
+
+
+@pytest.fixture(scope="module")
+def psb_model_dir(
+    tmp_path_factory: pytest.TempPathFactory, acc_models_psb_path: Path
+) -> Path:
+    """Create a full PSB model from the committed minimal PSB acc-models snapshot."""
+    model_dir = tmp_path_factory.mktemp("psb_model") / "ring3_model"
+    create_psb_model(
+        ring=3,
+        output_dir=model_dir,
+        year="2026",
+        fetch="path",
+        path=acc_models_psb_path,
+        nat_tunes=list(PSB_NAT_TUNES),
+    )
+    return model_dir
+
+
+@pytest.fixture(scope="module")
+def psb_model_dir_with_acd(
+    tmp_path_factory: pytest.TempPathFactory, acc_models_psb_path: Path
+) -> Path:
+    """Create a PSB model with explicit driven tunes and ACD excitation."""
+    model_dir = tmp_path_factory.mktemp("psb_model_acd") / "ring3_model"
+    create_psb_model(
+        ring=3,
+        output_dir=model_dir,
+        year="2026",
+        fetch="path",
+        path=acc_models_psb_path,
+        nat_tunes=list(PSB_NAT_TUNES),
+        drv_tunes=list(PSB_DRV_TUNES),
+    )
+    return model_dir
+
+
+def test_create_psb_model_via_omc3_api(psb_model_dir: Path) -> None:
+    """PSB model creation should work without shelling out to the omc3 CLI."""
+    expected_files = [
+        "job.create_model_nominal.madx",
+        "psb3_saved.seq",
+        "twiss.dat",
+        "twiss_ac.dat",
+        "twiss_elements.dat",
+    ]
+    for file_name in expected_files:
+        assert (psb_model_dir / file_name).exists(), f"Missing {file_name}"
+
+    sequence_text = (psb_model_dir / "psb3_saved.seq").read_text()
+    # If there is no ACD excitation, we should not have any ACD markers in the sequence
+    assert "hacmap: hackicker" not in sequence_text
+    assert "vacmap: vackicker" not in sequence_text
+    assert "matrix" not in sequence_text
+
+    twiss = tfs.read(psb_model_dir / "twiss.dat", index="NAME")
+    twiss_ac = tfs.read(psb_model_dir / "twiss_ac.dat", index="NAME")
+    twiss_elements = tfs.read(psb_model_dir / "twiss_elements.dat", index="NAME")
+
+    assert twiss.headers["NAME"] == "PSB3"
+    assert abs(twiss.headers["Q1"] % 1 - PSB_NAT_TUNES[0]) < 1e-6
+    assert abs(twiss.headers["Q2"] % 1 - PSB_NAT_TUNES[1]) < 1e-6
+    assert abs(twiss_ac.headers["Q1"] % 1 - PSB_NAT_TUNES[0]) < 1e-6
+    assert abs(twiss_ac.headers["Q2"] % 1 - PSB_NAT_TUNES[1]) < 1e-6
+    assert "BR3.BPM3L3" in twiss.index
+    assert "HACMAP" in twiss_elements.index
+    assert "VACMAP" in twiss_elements.index
+
+
+def test_create_psb_model_with_explicit_acd(
+    psb_model_dir_with_acd: Path,
+) -> None:
+    """Explicit driven tunes plus ACD excitation should produce a driven PSB model."""
+    accelerator = PSB(sequence_file=psb_model_dir_with_acd / "psb3_saved.seq", ring=3)
+    install_marker = accelerator.ac_dipole_name
+
+    twiss = tfs.read(psb_model_dir_with_acd / "twiss.dat", index="NAME")
+    twiss_ac = tfs.read(psb_model_dir_with_acd / "twiss_ac.dat", index="NAME")
+    twiss_elements = tfs.read(
+        psb_model_dir_with_acd / "twiss_elements.dat", index="NAME"
+    )
+
+    assert abs(twiss.headers["Q1"] % 1 - PSB_NAT_TUNES[0]) < 1e-6
+    assert abs(twiss.headers["Q2"] % 1 - PSB_NAT_TUNES[1]) < 1e-6
+    assert abs(twiss_ac.headers["Q1"] % 1 - PSB_DRV_TUNES[0]) < 1e-6
+    assert abs(twiss_ac.headers["Q2"] % 1 - PSB_DRV_TUNES[1]) < 1e-6
+    assert install_marker in twiss_elements.index
+    assert "HACMAP" in twiss_elements.index
+    assert "VACMAP" in twiss_elements.index
+
+
+
+
+def test_psb_saved_sequence_loads_in_madng(psb_model_dir: Path) -> None:
+    """The generated PSB saved sequence should support a real MAD-NG twiss run."""
+    interface = AcceleratorMadInterface(
+        accelerator=PSB(sequence_file=psb_model_dir / "psb3_saved.seq", ring=3)
+    )
+    try:
+        interface.observe()
+        twiss = interface.run_twiss(coupling=True)
+    finally:
+        with contextlib.suppress(Exception):
+            interface.close()
+
+    # This will fail in a future version of MAD-NG, if we keep this "fix" from Silke.
+    assert abs(twiss.q1 % 1 - PSB_NAT_TUNES[0]) < 1e-6
+    assert abs(twiss.q2 % 1 - PSB_NAT_TUNES[1]) < 1e-6
+    assert "BR3.BPM3L3" in twiss.index
+    assert "BR3.BPM4L3" in twiss.index
