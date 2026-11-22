@@ -2,7 +2,15 @@
 
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the package is alpha and the API may change in any release.
 
-## [0.0.1] - Unreleased
+## [0.0.2]
+
+### Added
+- `perform_orbit_correction(bpms=..., correctors=..., plane=...)`: restrict the monitors and kickers used and correct in `"x"`, `"y"` or `"xy"` (default `"x"`).
+
+### Removed
+- SPS accelerator descriptor.
+
+## [0.0.1]
 
 ### Added
 - LHC, PSB and FCC-ee accelerator descriptors.

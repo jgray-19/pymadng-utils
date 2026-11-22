@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pymadng-utils"
-version = "0.0.1"
+version = "0.0.2"
 description = "MAD-NG and pymadng utility interfaces and tests"
 readme = "README.md"
 authors = [

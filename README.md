@@ -3,7 +3,7 @@
 [![codecov](https://codecov.io/gh/jgray-19/pymadng-utils/graph/badge.svg?token=L1EV8MDM6M)](https://codecov.io/gh/jgray-19/pymadng-utils)
 [![Coverage](https://github.com/jgray-19/pymadng-utils/actions/workflows/coverage.yml/badge.svg)](https://github.com/jgray-19/pymadng-utils/actions/workflows/coverage.yml)
 
-> **Alpha (0.0.1).** The API may change without notice.
+> **Alpha (0.0.2).** The API may change without notice.
 
 `pymadng-utils` is a small Python library for accelerator-model workflows that cross the MAD-X/MAD-NG boundary. It provides:
 

@@ -14,7 +14,7 @@ Scope
 
 Python 3.11 or newer is required. Model creation and sequence export (``pymadng_utils.madx.make_sequence`` and ``pymadng_utils.model_creator.create_models``) require the optional ``model`` dependencies and working MAD-X/OMC3 installations; everything else needs only the core install.
 
-The package is alpha (0.0.1): the API may change without notice.
+The package is alpha (0.0.2): the API may change without notice.
 
 .. toctree::
    :maxdepth: 2
