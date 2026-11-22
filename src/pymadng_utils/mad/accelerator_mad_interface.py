@@ -926,12 +926,15 @@ local {info.dk_table}, {attr} in loaded_sequence['{element_name}']
         corrector_file: Path | None = None,
         twiss_name: str = "zero_twiss",
         correct_tunes: bool = True,
+        bpms: list[str] | None = None,
+        correctors: list[str] | None = None,
+        plane: str = "x",
     ) -> dict[str, float]:
         """Correct the off-momentum orbit towards an on-momentum twiss, then rematch the tunes.
 
-        Runs MAD-NG ``correct`` (SVD, horizontal plane only) with the off-momentum twiss at
-        ``machine_deltap`` as model and the MAD-NG twiss table named ``twiss_name`` as target;
-        that table must already exist in the MAD-NG session.
+        Runs MAD-NG ``correct`` (SVD) with the off-momentum twiss at ``machine_deltap`` as model
+        and the MAD-NG twiss table named ``twiss_name`` as target; that table must already exist
+        in the MAD-NG session.
 
         Args:
             machine_deltap: Momentum deviation ``dp/p`` of the machine.
@@ -940,16 +943,56 @@ local {info.dk_table}, {attr} in loaded_sequence['{element_name}']
             corrector_file: If given, the corrector table is written to this file.
             twiss_name: Name of the target twiss table in MAD-NG.
             correct_tunes: Rematch the tunes after the correction.
+            bpms: If given, only these monitors are used.
+            correctors: If given, only these kickers are used.
+            plane: Correction plane, ``"x"``, ``"y"`` or ``"xy"``.
 
         Returns:
             The tune knob values ``{qx_knob: value, qy_knob: value}``.
         """
         qx_knob, qy_knob = self.accelerator.tune_variables
+        if plane not in {"x", "y", "xy"}:
+            raise ValueError(f"Invalid orbit correction plane {plane!r}; expected 'x', 'y' or 'xy'")
         if correct_tunes and (target_qx is None or target_qy is None):
             raise ValueError("target_qx and target_qy are required when correct_tunes=True")
         self.mad["machine_deltap"] = machine_deltap
         self.mad["correct_file"] = str(corrector_file.absolute()) if corrector_file else None
+        self.mad["correction_plane"] = plane
 
+        filtered = bpms is not None or correctors is not None
+        if filtered:
+            self._clear_disabled_elements()
+            if bpms is not None:
+                self._enable_only_named_elements(bpms, "MAD.element.monitor")
+            if correctors is not None:
+                self._enable_only_named_elements(correctors, "MAD.element.kicker")
+        try:
+            self._run_orbit_correction(twiss_name)
+        finally:
+            if filtered:
+                self._clear_disabled_elements()
+        if correct_tunes:
+            return self.match_tunes(target_qx, target_qy, deltap=machine_deltap)
+        return {
+            qx_knob: self.mad[f"MADX['{qx_knob}']"],
+            qy_knob: self.mad[f"MADX['{qy_knob}']"],
+        }
+
+    def _clear_disabled_elements(self) -> None:
+        self.mad.send("loaded_sequence:deselect(MAD.element.flags.disabled)")
+
+    def _enable_only_named_elements(self, names: list[str], element_class: str) -> None:
+        """Disable every element of ``element_class`` except ``names``."""
+        self.mad.send(f"""
+local disabled_flag = MAD.element.flags.disabled
+loaded_sequence:select(disabled_flag, nil, {{class={element_class}}})
+loaded_sequence:deselect(disabled_flag, nil, {self.py_name}:recv())
+{self.py_name}:send("Complete")
+""")
+        self.mad.send(names)
+        self._check_mad_response("Complete", "Error applying orbit-correction element filter")
+
+    def _run_orbit_correction(self, twiss_name: str) -> None:
         self.mad.send(rf"""
 local correct, option in MAD
 
@@ -957,7 +1000,7 @@ io.write("*** orbit correction using off momentum twiss\n")
 local tws_offmom = twiss {{ sequence=loaded_sequence, deltap=machine_deltap }}
 
 local fmt = option.numfmt ; option.numfmt = "% -.16e"
-local tbl = correct {{ sequence=loaded_sequence, model=tws_offmom, target={twiss_name}, method="svd", info=1, plane="x" }}
+local tbl = correct {{ sequence=loaded_sequence, model=tws_offmom, target={twiss_name}, method="svd", info=1, plane=correction_plane }}
 if correct_file then
     tbl:write(correct_file)
 end
@@ -966,12 +1009,6 @@ option.numfmt = fmt
 {self.py_name}:send("Complete")
         """)
         self._check_mad_response("Complete", "Error during MAD-NG orbit correction")
-        if correct_tunes:
-            return self.match_tunes(target_qx, target_qy, deltap=machine_deltap)
-        return {
-            qx_knob: self.mad[f"MADX['{qx_knob}']"],
-            qy_knob: self.mad[f"MADX['{qy_knob}']"],
-        }
 
     def install_ac_dipole(
         self,

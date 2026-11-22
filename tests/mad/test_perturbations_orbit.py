@@ -202,6 +202,75 @@ py:send({tbl.q1, tbl.q2}, true)
     assert q2 == pytest.approx(60.31, abs=1e-5)
 
 
+def test_perform_orbit_correction_rejects_unknown_plane(
+    lhc_interface: AcceleratorMadInterface,
+) -> None:
+    """Only ``x``, ``y`` and ``xy`` are valid correction planes."""
+    with pytest.raises(ValueError, match="Invalid orbit correction plane"):
+        lhc_interface.perform_orbit_correction(machine_deltap=0.0, correct_tunes=False, plane="z")
+
+
+def test_perform_orbit_correction_uses_only_requested_correctors(
+    lhc_interface: AcceleratorMadInterface,
+    tmp_path,
+) -> None:
+    """With ``correctors`` given, the corrector table holds only those kickers."""
+    correctors = ["MCBH.12R2.B1", "MCBH.14R2.B1", "MCBH.16R2.B1", "MCBH.18R2.B1"]
+    corrector_file = tmp_path / "correctors.tfs"
+    lhc_interface.mad["zero_twiss", "_"] = lhc_interface.mad.twiss(sequence="loaded_sequence")
+    lhc_interface.set_magnet_strengths({"MB.C14R2.B1.dk0l": 1e-5})
+
+    lhc_interface.perform_orbit_correction(
+        machine_deltap=0.0,
+        correct_tunes=False,
+        corrector_file=corrector_file,
+        correctors=correctors,
+    )
+
+    table = tfs.read(corrector_file)
+    used = {name.upper() for name in table.loc[table["kind"].str.endswith("kicker"), "ename"]}
+    assert used and used <= set(correctors)
+
+
+def test_perform_orbit_correction_filter_is_cleared_afterwards(
+    lhc_interface: AcceleratorMadInterface,
+    tmp_path,
+) -> None:
+    """The element filter must not leak into a later unfiltered correction."""
+    corrector_file = tmp_path / "all_correctors.tfs"
+    lhc_interface.mad["zero_twiss", "_"] = lhc_interface.mad.twiss(sequence="loaded_sequence")
+    lhc_interface.set_magnet_strengths({"MB.C14R2.B1.dk0l": 1e-5})
+    lhc_interface.perform_orbit_correction(
+        machine_deltap=0.0,
+        correct_tunes=False,
+        bpms=["BPM.10R2.B1", "BPM.11R2.B1", "BPM.12R2.B1"],
+        correctors=["MCBH.12R2.B1", "MCBH.14R2.B1"],
+    )
+
+    lhc_interface.perform_orbit_correction(
+        machine_deltap=0.0, correct_tunes=False, corrector_file=corrector_file
+    )
+
+    assert len(tfs.read(corrector_file)) > 2
+
+
+def test_perform_orbit_correction_y_plane_leaves_horizontal_orbit(
+    lhc_interface: AcceleratorMadInterface,
+    tmp_path,
+) -> None:
+    """Vertical-plane correction uses only vertical kickers (a bend kick is horizontal-only)."""
+    corrector_file = tmp_path / "correctors_y.tfs"
+    lhc_interface.mad["zero_twiss", "_"] = lhc_interface.mad.twiss(sequence="loaded_sequence")
+    lhc_interface.set_magnet_strengths({"MB.C14R2.B1.dk0l": 1e-5})
+
+    lhc_interface.perform_orbit_correction(
+        machine_deltap=0.0, correct_tunes=False, corrector_file=corrector_file, plane="y"
+    )
+
+    kinds = {str(kind).lower() for kind in tfs.read(corrector_file)["kind"]} - {"monitor"}
+    assert kinds == {"vkicker"}
+
+
 def test_quadrupole_knob_updates_use_dknl(
     lhc_interface: AcceleratorMadInterface,
 ) -> None:
